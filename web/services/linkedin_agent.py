@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import re
 import uuid
 import time
 from typing import Optional, AsyncGenerator
@@ -10,7 +11,7 @@ from dataclasses import dataclass, field
 from anthropic import Anthropic
 from sqlalchemy.orm import Session
 
-from web.models import Article, LinkedInDraft
+from web.models import Article, LinkedInDraft, ReferencePost
 from web.config import ANTHROPIC_API_KEY, LINKEDIN_GUIDELINES_PATH
 from web.services.linkedin_service import SCENARIOS
 
@@ -80,6 +81,40 @@ class LinkedInAgent:
             return LINKEDIN_GUIDELINES_PATH.read_text(encoding="utf-8")
         except FileNotFoundError:
             return ""
+
+    def _get_reference_examples(self, scenario: str, guidelines: str) -> str:
+        """Get reference post examples for the given scenario."""
+        examples = []
+
+        # DB에서 ReferencePost 최대 2개
+        ref_posts = (
+            self.db.query(ReferencePost)
+            .order_by(ReferencePost.created_at.desc())
+            .limit(2)
+            .all()
+        )
+        for post in ref_posts:
+            examples.append(post.content)
+
+        # 지침서에서 해당 시나리오 예시 추출
+        if guidelines:
+            pattern = rf"### 시나리오 {scenario} 예시.*?```\n(.*?)```"
+            match = re.search(pattern, guidelines, re.DOTALL)
+            if match:
+                examples.append(match.group(1).strip())
+
+        if not examples:
+            return ""
+
+        examples_text = ""
+        for i, ex in enumerate(examples, 1):
+            examples_text += f"\n### 예시 {i}\n{ex}\n"
+
+        return f"""
+## 참고 예시
+
+다음은 좋은 포스팅 예시입니다. 이 스타일과 구조를 참고하세요:
+{examples_text}"""
 
     async def run(
         self,
@@ -273,6 +308,8 @@ class LinkedInAgent:
         session.current_step = 3
         yield self._sse("step_start", {"step": 3, "name": "초안 작성"})
 
+        reference_section = self._get_reference_examples(session.scenario, guidelines)
+
         prompt = f"""다음 정보를 바탕으로 LinkedIn 포스트 초안을 작성해주세요.
 
 ## 기사 분석
@@ -296,7 +333,7 @@ class LinkedInAgent:
 ## 페르소나
 - VC 심사역 + ML 엔지니어 출신 AI 빌더
 - 최신 AI 기술과 시장 동향에 깊은 이해
-
+{reference_section}
 ## 중요
 - LinkedIn 포스트 본문만 출력하세요
 - 설명이나 주석 없이 바로 사용 가능한 형태
