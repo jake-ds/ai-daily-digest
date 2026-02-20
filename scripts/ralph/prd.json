@@ -29,7 +29,7 @@
         "python -m py_compile 통과"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "notes": "self.guidelines는 __init__에서 이미 로드됨 (line 64). _build_prompt()에서 사용만 하면 됨"
     },
     {

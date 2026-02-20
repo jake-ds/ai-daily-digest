@@ -8,6 +8,18 @@ Started: 2026년 2월 21일 토요일 03시 32분 43초 KST
 - Always `python -m py_compile` after editing Python files
 ---
 
+## 2026-02-21 - LQ-002
+- Integrated self.guidelines into _build_prompt() with conditional logic
+- When guidelines file exists: full guidelines text included as "작성 지침서" section
+- When guidelines empty: fallback to existing hardcoded rules (문체, 금지사항, 구조, 길이)
+- Prompt structure: 페르소나 → 시나리오 → 기사 정보 → 지침서/규칙 → 출력 형식
+- Files changed: web/services/linkedin_service.py
+- **Learnings for future iterations:**
+  - _build_prompt() uses f-string with conditional sections built as variables
+  - self.guidelines loaded from LINKEDIN_GUIDELINES_PATH (data/linkedin_guidelines.md)
+  - The hardcoded rules are a minimal fallback; the full guidelines file is much more comprehensive
+---
+
 ## 2026-02-21 - LQ-001
 - Added Scenario F (권위자 관점 + 역설적 인사이트) to SCENARIOS dict with all required fields
 - Added Scenario F detection keywords to detect_scenario(): 권위자, expert, 통념, 학습, fomo, 배워야, 역설, misconception, myth, contrary
