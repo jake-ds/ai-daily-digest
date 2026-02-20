@@ -188,26 +188,22 @@ class LinkedInService:
 
     def _build_prompt(self, article: Article, scenario: str, scenario_info: dict) -> str:
         """Build the generation prompt with Jake's guidelines."""
-        return f"""당신은 LinkedIn 포스팅 전문가입니다. 다음 기사를 바탕으로 LinkedIn 포스트를 작성해주세요.
-
-## 페르소나
-- VC 심사역 + ML 엔지니어 출신 AI 빌더
-- 최신 AI 기술과 시장 동향에 깊은 이해
-- 실무 경험을 바탕으로 인사이트 공유
-
-## 시나리오 {scenario}: {scenario_info['name']}
-- 설명: {scenario_info['description']}
-- 훅 스타일: {scenario_info['hook_style']}
-- 본문 구조: {scenario_info['structure']}
-- 마무리: {scenario_info['closing']}
-
-## 기사 정보
+        # 기사 정보 섹션
+        article_section = f"""## 기사 정보
 - 제목: {article.title}
 - 출처: {article.source}
 - URL: {article.url}
-- 요약: {article.ai_summary or article.summary or "없음"}
+- 요약: {article.ai_summary or article.summary or "없음"}"""
 
-## 공통 규칙
+        # 지침서가 있으면 전문 포함, 없으면 하드코딩된 규칙 사용
+        if self.guidelines:
+            rules_section = f"""## 작성 지침서 (반드시 준수)
+
+아래는 LinkedIn 포스팅 작성 지침서 전문입니다. 이 지침을 철저히 따라주세요:
+
+{self.guidelines}"""
+        else:
+            rules_section = f"""## 공통 규칙
 
 ### 문체
 - 기본: 하십시오체 ("~입니다", "~했습니다")
@@ -228,7 +224,24 @@ class LinkedInService:
 
 ### 길이
 - 1200~1800자 사이
-- 단락 구분 명확히
+- 단락 구분 명확히"""
+
+        return f"""당신은 LinkedIn 포스팅 전문가입니다. 다음 기사를 바탕으로 LinkedIn 포스트를 작성해주세요.
+
+## 페르소나
+- VC 심사역 + ML 엔지니어 출신 AI 빌더
+- 최신 AI 기술과 시장 동향에 깊은 이해
+- 실무 경험을 바탕으로 인사이트 공유
+
+## 시나리오 {scenario}: {scenario_info['name']}
+- 설명: {scenario_info['description']}
+- 훅 스타일: {scenario_info['hook_style']}
+- 본문 구조: {scenario_info['structure']}
+- 마무리: {scenario_info['closing']}
+
+{article_section}
+
+{rules_section}
 
 ## 출력 형식
 LinkedIn 포스트 본문만 출력하세요. 설명이나 주석 없이 바로 사용 가능한 형태로 작성해주세요.
