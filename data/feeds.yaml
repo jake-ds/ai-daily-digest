@@ -1,0 +1,257 @@
+# AI Daily Digest - RSS 피드 설정
+
+feeds:
+  # 빅테크 블로그
+  bigtech:
+    - name: OpenAI Blog
+      url: https://openai.com/blog/rss.xml
+      category: bigtech
+      priority: high
+
+    - name: Anthropic Research
+      url: https://www.anthropic.com/research/rss.xml
+      category: bigtech
+      priority: high
+
+    - name: Google AI Blog
+      url: https://blog.google/technology/ai/rss/
+      category: bigtech
+      priority: high
+
+    - name: Meta AI
+      url: https://ai.meta.com/blog/rss/
+      category: bigtech
+      priority: high
+
+    - name: Microsoft Research
+      url: https://www.microsoft.com/en-us/research/feed/
+      category: bigtech
+      priority: medium
+
+  # 연구
+  research:
+    - name: arXiv Computation and Language
+      url: https://rss.arxiv.org/rss/cs.CL
+      category: research
+      priority: high
+
+    - name: arXiv Computer Vision
+      url: https://rss.arxiv.org/rss/cs.CV
+      category: research
+      priority: medium
+
+
+  # 뉴스
+  news:
+    - name: TechCrunch AI
+      url: https://techcrunch.com/category/artificial-intelligence/feed/
+      category: news
+      priority: high
+
+    - name: The Verge AI
+      url: https://www.theverge.com/rss/ai-artificial-intelligence/index.xml
+      category: news
+      priority: medium
+
+    - name: MIT Technology Review AI
+      url: https://www.technologyreview.com/topic/artificial-intelligence/feed
+      category: news
+      priority: medium
+
+  # 뉴스레터 (미국 AI/Tech)
+  newsletter:
+    - name: Import AI (Jack Clark)
+      url: https://importai.substack.com/feed
+      category: newsletter
+      priority: high
+
+    - name: Latent Space
+      url: https://www.latent.space/feed
+      category: newsletter
+      priority: high
+
+    # 업계 리더 블로그
+    - name: Lilian Weng (OpenAI)
+      url: https://lilianweng.github.io/index.xml
+      category: newsletter
+      priority: high
+
+    - name: Simon Willison
+      url: https://simonwillison.net/atom/everything/
+      category: newsletter
+      priority: high
+
+    - name: Chip Huyen
+      url: https://huyenchip.com/feed.xml
+      category: newsletter
+      priority: high
+
+    - name: Eugene Yan
+      url: https://eugeneyan.com/rss/
+      category: newsletter
+      priority: medium
+
+    - name: Jay Alammar
+      url: https://jalammar.github.io/feed.xml
+      category: newsletter
+      priority: medium
+
+  # 팟캐스트 (미국 AI/Tech)
+  podcast:
+    - name: Lenny's Podcast
+      url: https://www.lennysnewsletter.com/feed
+      category: podcast
+      priority: high
+
+    - name: No Priors (a16z)
+      url: https://feeds.megaphone.fm/nopriors
+      category: podcast
+      priority: high
+
+    - name: Latent Space Podcast
+      url: https://api.substack.com/feed/podcast/1084089.rss
+      category: podcast
+      priority: high
+
+    - name: All-In Podcast
+      url: https://allin.libsyn.com/rss
+      category: podcast
+      priority: high
+
+    - name: Lex Fridman Podcast
+      url: https://lexfridman.com/feed/podcast/
+      category: podcast
+      priority: high
+
+  # VC / 투자 동향
+  vc:
+    # 뉴스/미디어
+    - name: TechCrunch Venture
+      url: https://techcrunch.com/category/venture/feed/
+      category: vc
+      priority: high
+
+    - name: Crunchbase News
+      url: https://news.crunchbase.com/feed/
+      category: vc
+      priority: high
+
+    - name: CB Insights Research
+      url: https://www.cbinsights.com/research/feed/
+      category: vc
+      priority: high
+
+    # VC 펌 블로그
+    - name: Sequoia Blog
+      url: https://www.sequoiacap.com/feed/
+      category: vc
+      priority: high
+
+    - name: Greylock Partners
+      url: https://greylock.com/feed/
+      category: vc
+      priority: high
+
+    # 개인 VC/창업자 블로그
+    - name: AVC (Fred Wilson)
+      url: https://avc.com/feed/
+      category: vc
+      priority: high
+
+    - name: Marc Andreessen (pmarca)
+      url: https://pmarca.substack.com/feed
+      category: vc
+      priority: high
+
+    - name: Naval Ravikant
+      url: https://nav.al/feed
+      category: vc
+      priority: medium
+
+  # 한국어 소스
+  korean:
+    - name: AI타임스
+      url: https://www.aitimes.com/rss/allArticle.xml
+      category: korean
+      priority: high
+
+    - name: GeekNews
+      url: https://news.hada.io/rss/news
+      category: korean
+      priority: high
+
+# 키워드 설정
+keywords:
+  high_priority:
+    # AI
+    - LLM
+    - GPT
+    - Claude
+    - Gemini
+    - transformer
+    - fine-tuning
+    - RAG
+    - agent
+    - multimodal
+    - reasoning
+    - vibe coding
+    - cursor
+    - copilot
+    # VC/투자
+    - Series A
+    - Series B
+    - Series C
+    - seed round
+    - funding
+    - raised
+    - valuation
+    - unicorn
+    - IPO
+    - acquisition
+    - M&A
+
+  topics:
+    ai_tech:
+      - neural network
+      - deep learning
+      - machine learning
+      - foundation model
+      - embedding
+      - inference
+      - training
+
+    vc_investment:
+      - venture capital
+      - lead investor
+      - cap table
+      - term sheet
+      - due diligence
+      - portfolio
+      - exit
+      - down round
+      - bridge round
+      - pre-money
+      - post-money
+      - runway
+      - burn rate
+
+    startup:
+      - YC
+      - Y Combinator
+      - accelerator
+      - incubator
+      - pivot
+      - product-market fit
+      - go-to-market
+      - ARR
+      - MRR
+      - growth stage
+
+    vibe_coding:
+      - AI coding
+      - code generation
+      - coding assistant
+      - IDE
+      - developer tools
+      - vibe coding
+      - natural language programming

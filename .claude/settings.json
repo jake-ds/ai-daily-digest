@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Read",
+      "Edit(./src/**)",
+      "Edit(./web/**)",
+      "Edit(./data/**)",
+      "Edit(./main.py)",
+      "Edit(./personal_digest_worker.py)",
+      "Edit(./linkedin_worker.py)",
+      "Edit(./run_web.py)",
+      "Edit(./requirements.txt)",
+      "Edit(./.github/**)",
+      "Bash(python -m py_compile:*)",
+      "Bash(python main.py:*)",
+      "Bash(python personal_digest_worker.py:*)",
+      "Bash(python run_web.py:*)",
+      "Bash(python -c:*)",
+      "Bash(pip install:*)",
+      "Bash(pip freeze:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git branch:*)",
+      "Bash(git checkout:*)",
+      "Bash(git stash:*)",
+      "Bash(ls:*)",
+      "Bash(wc:*)",
+      "Bash(sqlite3:*)",
+      "WebSearch",
+      "WebFetch"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Edit(./.env)",
+      "Edit(./.env.*)",
+      "Bash(rm -rf:*)",
+      "Bash(git push --force:*)",
+      "Bash(git reset --hard:*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "file=$(jq -r '.tool_input.file_path // .tool_input.filePath // empty' 2>/dev/null); if [ -n \"$file\" ] && echo \"$file\" | grep -q '\\.py$'; then python -m py_compile \"$file\" 2>&1 || true; fi"
+          }
+        ]
+      }
+    ]
+  }
+}

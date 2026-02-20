@@ -1,0 +1,63 @@
+# AI Daily Digest - YouTube 채널 설정
+# YouTube Data API v3를 사용하여 최신 영상 수집
+
+channels:
+  # 논문/연구 해설
+  - id: "UCbfYPyITQ-7l4upoX8nvctg"  # Two Minute Papers
+    name: "Two Minute Papers"
+    category: "research"
+    priority: "high"
+
+  - id: "UCZHmQk67mN31gbfdCYIELGg"  # Yannic Kilcher
+    name: "Yannic Kilcher"
+    category: "research"
+    priority: "high"
+
+  # AI 뉴스/트렌드
+  - id: "UCWN3xxRkmTPmbKwht9FuE5A"  # AI Explained
+    name: "AI Explained"
+    category: "news"
+    priority: "high"
+
+  - id: "UCMLtBahI5DMrt0NPvDSoIRQ"  # Fireship
+    name: "Fireship"
+    category: "community"
+    priority: "medium"
+
+  # 빅테크/실무
+  - id: "UCfzlCWGWYyIQ0aLC5w48gBQ"  # Andrej Karpathy
+    name: "Andrej Karpathy"
+    category: "bigtech"
+    priority: "high"
+
+  # AI 뉴스 & 리뷰 (미국) - 검증된 채널 ID
+  - id: "UCawZsQWqfGSbCI5yjkdVkTA"  # Matthew Berman
+    name: "Matthew Berman"
+    category: "news"
+    priority: "high"
+
+  - id: "UCqcbQf6yw5KzRoDDcZ_wBSw"  # Wes Roth
+    name: "Wes Roth"
+    category: "news"
+    priority: "high"
+
+  - id: "UCbY9xX3_jW5c2fjlZVBI4cg"  # TheAIGRID
+    name: "TheAIGRID"
+    category: "news"
+    priority: "high"
+
+  - id: "UCvKRFNawVcuz4b9ihUTApCg"  # David Shapiro
+    name: "David Shapiro"
+    category: "news"
+    priority: "medium"
+
+  # AI 튜토리얼 & 실무
+  - id: "UCrXSVX9a1mj8l0CMLwKgMVw"  # AI Jason
+    name: "AI Jason"
+    category: "community"
+    priority: "medium"
+
+  - id: "UC2WmuBuFq6gL08QYG-JjXKw"  # WorldofAI
+    name: "WorldofAI"
+    category: "news"
+    priority: "medium"

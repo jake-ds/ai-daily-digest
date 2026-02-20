@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}AI Daily Digest{% endblock %}</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+
+    <style>
+        .htmx-indicator {
+            display: none;
+        }
+        .htmx-request .htmx-indicator {
+            display: inline-block;
+        }
+        .htmx-request.htmx-indicator {
+            display: inline-block;
+        }
+
+        /* Custom tooltip container */
+        #custom-tooltip {
+            position: fixed;
+            padding: 10px 14px;
+            background: #1f2937;
+            color: white;
+            font-size: 13px;
+            line-height: 1.5;
+            border-radius: 8px;
+            z-index: 9999;
+            pointer-events: none;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            max-width: 220px;
+            opacity: 0;
+            transition: opacity 0.15s;
+        }
+        #custom-tooltip.visible {
+            opacity: 1;
+        }
+        #custom-tooltip .tooltip-title {
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        #custom-tooltip .tooltip-desc {
+            color: #d1d5db;
+            font-size: 12px;
+        }
+        #custom-tooltip .tooltip-status {
+            margin-top: 6px;
+            padding-top: 6px;
+            border-top: 1px solid #374151;
+            font-size: 11px;
+        }
+        #custom-tooltip .tooltip-status.done { color: #86efac; }
+        #custom-tooltip .tooltip-status.current { color: #93c5fd; }
+        #custom-tooltip .tooltip-status.pending { color: #9ca3af; }
+    </style>
+
+    {% block head %}{% endblock %}
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Navigation -->
+    <nav class="bg-white shadow-sm border-b">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex">
+                    <a href="/" class="flex items-center text-xl font-bold text-gray-900">
+                        AI Daily Digest
+                    </a>
+                    <div class="hidden sm:ml-8 sm:flex sm:space-x-4">
+                        <a href="/" class="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 hover:text-gray-900">
+                            Dashboard
+                        </a>
+                        <a href="/articles" class="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 hover:text-gray-900">
+                            Articles
+                        </a>
+                        <a href="/settings" class="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 hover:text-gray-900">
+                            Settings
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Toast container for notifications -->
+    <div id="toast-container" class="fixed bottom-4 right-4 z-50 space-y-2"></div>
+
+    <!-- Custom tooltip element -->
+    <div id="custom-tooltip"></div>
+
+    <script>
+        // Custom tooltip handler
+        const tooltip = document.getElementById('custom-tooltip');
+
+        document.addEventListener('mouseover', function(e) {
+            const target = e.target.closest('[data-tooltip-title]');
+            if (target) {
+                const title = target.dataset.tooltipTitle;
+                const desc = target.dataset.tooltipDesc;
+                const status = target.dataset.tooltipStatus;
+                const statusClass = target.dataset.tooltipStatusClass || '';
+
+                tooltip.innerHTML = `
+                    <div class="tooltip-title">${title}</div>
+                    <div class="tooltip-desc">${desc}</div>
+                    <div class="tooltip-status ${statusClass}">${status}</div>
+                `;
+
+                const rect = target.getBoundingClientRect();
+                tooltip.style.left = rect.left + (rect.width / 2) - (tooltip.offsetWidth / 2) + 'px';
+                tooltip.style.top = (rect.top - tooltip.offsetHeight - 8) + 'px';
+                tooltip.classList.add('visible');
+            }
+        });
+
+        document.addEventListener('mouseout', function(e) {
+            const target = e.target.closest('[data-tooltip-title]');
+            if (target) {
+                tooltip.classList.remove('visible');
+            }
+        });
+    </script>
+
+    <script>
+        // Toast notification helper
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            const colors = {
+                'info': 'bg-blue-500',
+                'success': 'bg-green-500',
+                'error': 'bg-red-500',
+                'warning': 'bg-yellow-500'
+            };
+            toast.className = `${colors[type]} text-white px-4 py-3 rounded shadow-lg`;
+            toast.textContent = message;
+            container.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        // Copy to clipboard helper
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                showToast('Copied to clipboard!', 'success');
+            });
+        }
+
+        // HTMX event handlers
+        document.body.addEventListener('htmx:afterRequest', function(evt) {
+            if (evt.detail.successful && evt.detail.target.dataset.successMessage) {
+                showToast(evt.detail.target.dataset.successMessage, 'success');
+            }
+        });
+
+        document.body.addEventListener('htmx:responseError', function(evt) {
+            showToast('An error occurred. Please try again.', 'error');
+        });
+    </script>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,373 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - AI Daily Digest{% endblock %}
+
+{% block content %}
+<div class="space-y-8">
+    <!-- Header -->
+    <div class="flex justify-between items-center">
+        <h1 class="text-2xl font-bold text-gray-900">Dashboard</h1>
+        <span class="text-sm text-gray-500">{{ now().strftime('%Y-%m-%d %H:%M') if now else '' }}</span>
+    </div>
+
+    <!-- Collection Buttons -->
+    <div class="bg-white rounded-lg shadow p-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">Run Collection</h2>
+        <div class="flex flex-wrap gap-4">
+            <button
+                onclick="startCollection('news')"
+                class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+            >
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z"></path>
+                </svg>
+                News Collection
+            </button>
+
+            <button
+                onclick="startCollection('viral')"
+                class="inline-flex items-center px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition"
+            >
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z"></path>
+                </svg>
+                Viral Collection
+            </button>
+
+            <button
+                onclick="startCollection('all')"
+                class="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition"
+            >
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                </svg>
+                Full Collection
+            </button>
+        </div>
+
+        <!-- Active collections container - each collection gets its own card -->
+        <div id="active-collections" class="mt-4 space-y-3"></div>
+    </div>
+
+    <!-- Today's Stats -->
+    <div class="bg-white rounded-lg shadow p-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">Today's Statistics</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="text-center p-4 bg-blue-50 rounded-lg">
+                <div class="text-3xl font-bold text-blue-600">{{ stats.total_articles }}</div>
+                <div class="text-sm text-gray-600 mt-1">Articles Collected</div>
+            </div>
+            <div class="text-center p-4 bg-orange-50 rounded-lg">
+                <div class="text-3xl font-bold text-orange-600">{{ stats.viral_articles }}</div>
+                <div class="text-sm text-gray-600 mt-1">Viral Content</div>
+            </div>
+            <div class="text-center p-4 bg-green-50 rounded-lg">
+                <div class="text-3xl font-bold text-green-600">{{ stats.drafts_generated }}</div>
+                <div class="text-sm text-gray-600 mt-1">LinkedIn Drafts</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <!-- Recent Collections -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold text-gray-900 mb-4">Recent Collections</h2>
+            {% if recent_collections %}
+            <div class="space-y-3">
+                {% for collection in recent_collections %}
+                <div class="p-3 bg-gray-50 rounded-lg">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <div class="font-medium text-gray-900">{{ collection.name }}</div>
+                            <div class="text-sm text-gray-500">
+                                {{ collection.collected_at.strftime('%Y-%m-%d %H:%M') if collection.collected_at else 'N/A' }}
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-3">
+                            <span class="text-sm font-medium {% if collection.status == 'completed' %}text-green-600{% elif collection.status == 'running' %}text-blue-600{% else %}text-red-600{% endif %}">
+                                {% if collection.status == 'running' %}
+                                <span class="flex items-center">
+                                    <svg class="animate-spin -ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    Running
+                                </span>
+                                {% elif collection.status == 'failed' %}
+                                <button onclick="toggleError({{ collection.id }})" class="flex items-center hover:text-red-800">
+                                    Failed
+                                    <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                    </svg>
+                                </button>
+                                {% else %}
+                                {{ collection.status.title() }}
+                                {% endif %}
+                            </span>
+                            <span class="px-2 py-1 text-xs bg-gray-200 rounded">{{ collection.article_count }} articles</span>
+                            {% if collection.notion_page_url %}
+                            <a href="{{ collection.notion_page_url }}" target="_blank" class="text-blue-600 hover:text-blue-800">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                                </svg>
+                            </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% if collection.status == 'failed' and collection.error_message %}
+                    <div id="error-{{ collection.id }}" class="hidden mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                        <div class="flex items-start">
+                            <svg class="w-5 h-5 text-red-500 mr-2 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            <div class="flex-1 min-w-0">
+                                <div class="text-sm font-medium text-red-800">Error Message</div>
+                                <pre class="mt-1 text-xs text-red-700 whitespace-pre-wrap break-all">{{ collection.error_message }}</pre>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-gray-500 text-center py-4">No collections yet. Run your first collection above.</p>
+            {% endif %}
+        </div>
+
+        <!-- Top Articles -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold text-gray-900 mb-4">Top Articles</h2>
+            {% if top_articles %}
+            <div class="space-y-3">
+                {% for article in top_articles %}
+                <a href="/articles/{{ article.id }}" class="block p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition">
+                    <div class="flex items-start justify-between">
+                        <div class="flex-1 min-w-0">
+                            <div class="font-medium text-gray-900 truncate">{{ article.title }}</div>
+                            <div class="text-sm text-gray-500 mt-1">
+                                {{ article.source }} | {{ article.category or 'unknown' }}
+                            </div>
+                        </div>
+                        <div class="ml-4 flex items-center space-x-2">
+                            <span class="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded">
+                                {{ "%.1f"|format(article.score) }}
+                            </span>
+                            {% if article.linkedin_status != 'none' %}
+                            <span class="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded">
+                                LinkedIn
+                            </span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </a>
+                {% endfor %}
+            </div>
+            <div class="mt-4 text-center">
+                <a href="/articles" class="text-blue-600 hover:text-blue-800 text-sm font-medium">View All Articles</a>
+            </div>
+            {% else %}
+            <p class="text-gray-500 text-center py-4">No articles collected yet.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Progress stages for display
+const PROGRESS_STAGES = {
+    'starting': { name: '시작 중', icon: '🚀', order: 0, desc: '컬렉션 초기화' },
+    'collecting_rss': { name: 'RSS 피드 수집', icon: '📡', order: 1, desc: '40개 이상의 RSS 피드에서 기사 수집' },
+    'collecting_hn': { name: 'Hacker News 수집', icon: '🔶', order: 2, desc: 'HN 인기 게시물 수집' },
+    'collecting_viral': { name: '바이럴 수집', icon: '🔥', order: 3, desc: 'Reddit, GitHub, ProductHunt 등에서 수집' },
+    'deduplicating': { name: '중복 제거', icon: '🔄', order: 4, desc: 'URL 및 제목 기반 중복 제거' },
+    'scoring': { name: '점수 계산', icon: '📊', order: 5, desc: '키워드 기반 관련성 점수 계산' },
+    'enriching': { name: '논문 보강', icon: '📚', order: 6, desc: 'arXiv 논문 기관 정보 추가' },
+    'summarizing': { name: 'AI 요약', icon: '✨', order: 7, desc: 'Claude API로 한국어 요약 생성' },
+    'storing': { name: 'DB 저장', icon: '💾', order: 8, desc: '로컬 데이터베이스에 저장' },
+    'syncing_notion': { name: 'Notion 동기화', icon: '📝', order: 9, desc: 'Notion 페이지 생성' },
+    'completed': { name: '완료', icon: '✅', order: 10, desc: '수집 완료' },
+    'failed': { name: '실패', icon: '❌', order: -1, desc: '오류 발생' },
+};
+
+const TYPE_LABELS = {
+    'news': '📰 뉴스',
+    'viral': '🔥 바이럴',
+    'all': '📦 전체',
+};
+
+// Toggle error message visibility
+function toggleError(collectionId) {
+    const errorDiv = document.getElementById(`error-${collectionId}`);
+    if (errorDiv) {
+        errorDiv.classList.toggle('hidden');
+    }
+}
+
+// Track active collections
+const activePollers = {};
+
+// Create progress UI for a specific collection
+function createProgressUI(data) {
+    const stage = PROGRESS_STAGES[data.progress_stage] || PROGRESS_STAGES['starting'];
+    const stageOrder = stage.order;
+    const totalSteps = 10;
+    const progressPercent = stageOrder >= 0 ? Math.round((stageOrder / totalSteps) * 100) : 0;
+    const typeLabel = TYPE_LABELS[data.type] || data.type;
+
+    return `
+        <div id="collection-${data.id || data.collection_id}"
+             data-collection-id="${data.id || data.collection_id}" data-status="${data.status}"
+             class="p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center">
+                    <svg class="animate-spin h-5 w-5 mr-3 text-blue-600" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span class="font-medium text-blue-800">${typeLabel} 수집 중</span>
+                </div>
+                <span class="text-sm text-blue-600">${progressPercent}%</span>
+            </div>
+
+            <!-- Progress bar -->
+            <div class="w-full bg-blue-200 rounded-full h-2 mb-3">
+                <div class="bg-blue-600 h-2 rounded-full transition-all duration-500" style="width: ${progressPercent}%"></div>
+            </div>
+
+            <!-- Current stage -->
+            <div class="flex items-center text-sm">
+                <span class="text-xl mr-2">${stage.icon}</span>
+                <span class="font-medium text-blue-900">${stage.name}</span>
+            </div>
+
+            <!-- Detail -->
+            <div class="mt-2 text-sm text-blue-700">
+                ${data.progress_detail || ''}
+            </div>
+
+            <!-- Stage indicators (compact with tooltips) -->
+            <div class="mt-3 flex flex-wrap gap-1.5">
+                ${Object.entries(PROGRESS_STAGES)
+                    .filter(([key]) => !['completed', 'failed'].includes(key))
+                    .sort((a, b) => a[1].order - b[1].order)
+                    .map(([key, s]) => {
+                        const isDone = s.order < stageOrder;
+                        const isCurrent = s.order === stageOrder;
+                        const bgClass = isDone ? 'bg-green-100 text-green-700' :
+                                        isCurrent ? 'bg-blue-600 text-white ring-2 ring-blue-300' :
+                                        'bg-gray-100 text-gray-400';
+                        const statusText = isDone ? '✓ 완료' : isCurrent ? '● 진행 중' : '○ 대기';
+                        const statusClass = isDone ? 'done' : isCurrent ? 'current' : 'pending';
+                        return `<span class="px-2 py-1 text-sm rounded cursor-help ${bgClass}"
+                            data-tooltip-title="${s.name}"
+                            data-tooltip-desc="${s.desc}"
+                            data-tooltip-status="${statusText}"
+                            data-tooltip-status-class="${statusClass}">${s.icon}</span>`;
+                    }).join('')}
+            </div>
+        </div>
+    `;
+}
+
+// Create completion UI
+function createCompletedUI(data) {
+    const isSuccess = data.status === 'completed';
+    const typeLabel = TYPE_LABELS[data.type] || data.type;
+    return `
+        <div id="collection-${data.id}" class="p-4 rounded-lg ${isSuccess ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center">
+                    <span class="text-2xl mr-3">${isSuccess ? '✅' : '❌'}</span>
+                    <div>
+                        <div class="font-medium ${isSuccess ? 'text-green-800' : 'text-red-800'}">
+                            ${typeLabel} ${isSuccess ? '수집 완료!' : '수집 실패'}
+                        </div>
+                        <div class="text-sm ${isSuccess ? 'text-green-600' : 'text-red-600'}">
+                            ${data.progress_detail || data.error_message || ''}
+                        </div>
+                    </div>
+                </div>
+                <button onclick="this.parentElement.parentElement.remove()" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+// Start a collection via fetch (not HTMX)
+async function startCollection(type) {
+    try {
+        const response = await fetch(`/api/digest/run?type=${type}`, { method: 'POST' });
+        const data = await response.json();
+
+        if (data.collection_id) {
+            // Add new collection card to container
+            const container = document.getElementById('active-collections');
+            const div = document.createElement('div');
+            div.innerHTML = createProgressUI({...data, id: data.collection_id});
+            container.appendChild(div.firstElementChild);
+
+            // Start polling for this collection
+            pollCollectionStatus(data.collection_id);
+        }
+    } catch (e) {
+        showToast('수집 시작 실패', 'error');
+        console.error(e);
+    }
+}
+
+// Poll for a specific collection's status
+function pollCollectionStatus(collectionId) {
+    // Prevent duplicate pollers
+    if (activePollers[collectionId]) return;
+
+    activePollers[collectionId] = setInterval(async () => {
+        try {
+            const response = await fetch(`/api/digest/collections/${collectionId}/status`);
+            const data = await response.json();
+
+            const card = document.getElementById(`collection-${collectionId}`);
+            if (!card) {
+                clearInterval(activePollers[collectionId]);
+                delete activePollers[collectionId];
+                return;
+            }
+
+            if (data.status === 'running') {
+                // Update progress UI in place
+                card.outerHTML = createProgressUI(data);
+            } else {
+                // Collection finished
+                clearInterval(activePollers[collectionId]);
+                delete activePollers[collectionId];
+
+                card.outerHTML = createCompletedUI(data);
+
+                showToast(
+                    data.status === 'completed'
+                        ? `수집 완료! ${data.article_count}개 기사`
+                        : '수집 실패: ' + (data.error_message || 'Unknown error'),
+                    data.status === 'completed' ? 'success' : 'error'
+                );
+
+                // Refresh stats after all collections complete
+                if (Object.keys(activePollers).length === 0) {
+                    setTimeout(() => location.reload(), 3000);
+                }
+            }
+        } catch (e) {
+            clearInterval(activePollers[collectionId]);
+            delete activePollers[collectionId];
+            console.error('Polling error:', e);
+        }
+    }, 1500);
+}
+</script>
+{% endblock %}

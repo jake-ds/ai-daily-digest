@@ -1,0 +1,73 @@
+"""Article model for storing collected articles."""
+
+from datetime import datetime
+from sqlalchemy import Column, Integer, String, DateTime, Text, Float, ForeignKey
+from sqlalchemy.orm import relationship
+
+from web.database import Base
+
+
+class Article(Base):
+    """Represents a collected article."""
+
+    __tablename__ = "articles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(Text, nullable=False)
+    url = Column(Text, unique=True, nullable=False, index=True)
+    source = Column(String(255), nullable=True)
+    category = Column(String(100), nullable=True, index=True)
+    summary = Column(Text, nullable=True)  # Original RSS summary
+    ai_summary = Column(Text, nullable=True)  # Claude-generated summary
+    score = Column(Float, default=0.0)
+    viral_score = Column(Float, nullable=True)
+    published_at = Column(DateTime, nullable=True)
+    collected_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    # Foreign keys
+    collection_id = Column(Integer, ForeignKey("collections.id"), nullable=True)
+
+    # Notion integration
+    notion_page_id = Column(String(255), nullable=True)
+
+    # LinkedIn status
+    linkedin_status = Column(String(50), default="none")  # none, generated, posted
+
+    # Relationships
+    collection = relationship("Collection", back_populates="articles")
+    linkedin_drafts = relationship("LinkedInDraft", back_populates="article", cascade="all, delete-orphan")
+
+    def __repr__(self):
+        return f"<Article {self.id}: {self.title[:50]}...>"
+
+    @property
+    def latest_draft(self):
+        """Get the most recent LinkedIn draft."""
+        if self.linkedin_drafts:
+            return max(self.linkedin_drafts, key=lambda d: d.created_at)
+        return None
+
+    def to_dict(self, include_drafts: bool = False) -> dict:
+        """Convert to dictionary for API responses."""
+        result = {
+            "id": self.id,
+            "title": self.title,
+            "url": self.url,
+            "source": self.source,
+            "category": self.category,
+            "summary": self.summary,
+            "ai_summary": self.ai_summary,
+            "score": self.score,
+            "viral_score": self.viral_score,
+            "published_at": self.published_at.isoformat() if self.published_at else None,
+            "collected_at": self.collected_at.isoformat() if self.collected_at else None,
+            "collection_id": self.collection_id,
+            "notion_page_id": self.notion_page_id,
+            "linkedin_status": self.linkedin_status,
+        }
+
+        if include_drafts:
+            result["linkedin_drafts"] = [d.to_dict() for d in self.linkedin_drafts]
+            result["latest_draft"] = self.latest_draft.to_dict() if self.latest_draft else None
+
+        return result

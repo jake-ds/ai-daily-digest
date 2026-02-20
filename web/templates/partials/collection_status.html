@@ -1,0 +1,24 @@
+{% if collection %}
+<div data-collection-id="{{ collection.id }}" data-status="{{ collection.status }}"
+     class="p-4 rounded-lg {% if collection.status == 'running' %}bg-blue-50{% elif collection.status == 'completed' %}bg-green-50{% else %}bg-red-50{% endif %}">
+    <div class="flex items-center">
+        {% if collection.status == 'running' %}
+        <svg class="animate-spin h-5 w-5 mr-3 text-blue-600" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <span class="text-blue-800">Collection in progress...</span>
+        {% elif collection.status == 'completed' %}
+        <svg class="h-5 w-5 mr-3 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+        </svg>
+        <span class="text-green-800">Collection completed! {{ collection.article_count }} articles collected.</span>
+        {% else %}
+        <svg class="h-5 w-5 mr-3 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+        </svg>
+        <span class="text-red-800">Collection failed: {{ collection.error_message or 'Unknown error' }}</span>
+        {% endif %}
+    </div>
+</div>
+{% endif %}

@@ -1,0 +1,401 @@
+{% extends "base.html" %}
+
+{% block title %}LinkedIn Guidelines - Settings{% endblock %}
+
+{% block head %}
+<!-- Marked.js for markdown rendering -->
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<!-- Simple MDE for markdown editing (loaded on demand) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/simplemde/latest/simplemde.min.css">
+<style>
+    .CodeMirror {
+        height: 500px;
+        font-size: 14px;
+    }
+    .editor-toolbar {
+        border-top-left-radius: 8px;
+        border-top-right-radius: 8px;
+    }
+    .CodeMirror {
+        border-bottom-left-radius: 8px;
+        border-bottom-right-radius: 8px;
+    }
+    .scenario-card {
+        transition: all 0.2s;
+    }
+    .scenario-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    /* Markdown content styles */
+    .markdown-content {
+        line-height: 1.7;
+    }
+    .markdown-content h1 { font-size: 1.75rem; font-weight: 700; margin: 1.5rem 0 1rem; color: #111827; }
+    .markdown-content h2 { font-size: 1.5rem; font-weight: 600; margin: 1.5rem 0 0.75rem; color: #1f2937; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.5rem; }
+    .markdown-content h3 { font-size: 1.25rem; font-weight: 600; margin: 1.25rem 0 0.5rem; color: #374151; }
+    .markdown-content p { margin: 0.75rem 0; color: #4b5563; }
+    .markdown-content ul, .markdown-content ol { margin: 0.75rem 0; padding-left: 1.5rem; color: #4b5563; }
+    .markdown-content li { margin: 0.25rem 0; }
+    .markdown-content code { background: #f3f4f6; padding: 0.125rem 0.375rem; border-radius: 0.25rem; font-size: 0.875rem; }
+    .markdown-content pre { background: #1f2937; color: #e5e7eb; padding: 1rem; border-radius: 0.5rem; overflow-x: auto; margin: 1rem 0; }
+    .markdown-content pre code { background: none; padding: 0; color: inherit; }
+    .markdown-content blockquote { border-left: 4px solid #3b82f6; padding-left: 1rem; margin: 1rem 0; color: #6b7280; font-style: italic; }
+    .markdown-content table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+    .markdown-content th, .markdown-content td { border: 1px solid #e5e7eb; padding: 0.5rem 0.75rem; text-align: left; }
+    .markdown-content th { background: #f9fafb; font-weight: 600; }
+    .markdown-content strong { font-weight: 600; color: #111827; }
+    .markdown-content hr { border: none; border-top: 1px solid #e5e7eb; margin: 1.5rem 0; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex justify-between items-center">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">LinkedIn Guidelines</h1>
+            <p class="text-gray-600 mt-1">LinkedIn 포스팅 지침서를 관리합니다</p>
+        </div>
+        <div class="flex gap-3">
+            <!-- Read mode buttons -->
+            <div id="read-mode-buttons">
+                <button onclick="enterEditMode()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                    </svg>
+                    편집
+                </button>
+            </div>
+            <!-- Edit mode buttons (hidden by default) -->
+            <div id="edit-mode-buttons" class="hidden flex gap-3">
+                <button onclick="cancelEdit()" class="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
+                    취소
+                </button>
+                <button onclick="restoreBackup()" class="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
+                    백업 복원
+                </button>
+                <button onclick="saveGuidelines()" id="save-btn" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path>
+                    </svg>
+                    저장
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Content Area -->
+        <div class="lg:col-span-2">
+            <!-- Read Mode -->
+            <div id="read-mode" class="bg-white rounded-lg shadow">
+                <div class="p-4 border-b">
+                    <h2 class="font-semibold text-gray-900">지침서 내용</h2>
+                </div>
+                <div class="p-6 max-h-[600px] overflow-y-auto">
+                    <div id="markdown-content" class="markdown-content"></div>
+                </div>
+            </div>
+
+            <!-- Edit Mode (hidden by default) -->
+            <div id="edit-mode" class="bg-white rounded-lg shadow hidden">
+                <div class="p-4 border-b flex justify-between items-center">
+                    <h2 class="font-semibold text-gray-900">지침서 편집</h2>
+                    <span id="save-status" class="text-sm text-gray-500"></span>
+                </div>
+                <div class="p-4">
+                    <textarea id="guidelines-editor">{{ content }}</textarea>
+                </div>
+            </div>
+        </div>
+
+        <!-- Scenarios Reference -->
+        <div class="space-y-4">
+            <div class="bg-white rounded-lg shadow p-4">
+                <h2 class="font-semibold text-gray-900 mb-4">시나리오 빠른 참조</h2>
+                <div class="space-y-3">
+                    {% for key, scenario in scenarios.items() %}
+                    <div class="scenario-card p-3 bg-gray-50 rounded-lg">
+                        <div class="flex items-center justify-between">
+                            <span class="font-medium text-gray-900">{{ key }}: {{ scenario.name }}</span>
+                            <button onclick="insertScenario('{{ key }}')" class="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 edit-only hidden">삽입</button>
+                        </div>
+                        <p class="text-sm text-gray-600 mt-1">{{ scenario.description }}</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Quick Tips -->
+            <div class="bg-white rounded-lg shadow p-4">
+                <h2 class="font-semibold text-gray-900 mb-3">작성 팁</h2>
+                <ul class="space-y-2 text-sm text-gray-600">
+                    <li class="flex items-start">
+                        <span class="text-green-500 mr-2">✓</span>
+                        하십시오체 기본, 해요체로 리듬 전환
+                    </li>
+                    <li class="flex items-start">
+                        <span class="text-green-500 mr-2">✓</span>
+                        1,200~1,800자 권장
+                    </li>
+                    <li class="flex items-start">
+                        <span class="text-green-500 mr-2">✓</span>
+                        숫자와 구체적 사례 활용
+                    </li>
+                    <li class="flex items-start">
+                        <span class="text-red-500 mr-2">✗</span>
+                        이모지, "여러분" 호칭 금지
+                    </li>
+                    <li class="flex items-start">
+                        <span class="text-red-500 mr-2">✗</span>
+                        과장 표현 금지 (혁명, 패러다임 등)
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Keyboard Shortcuts (edit mode only) -->
+            <div id="shortcuts-panel" class="bg-white rounded-lg shadow p-4 hidden">
+                <h2 class="font-semibold text-gray-900 mb-3">단축키</h2>
+                <div class="space-y-2 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">저장</span>
+                        <kbd class="px-2 py-1 bg-gray-100 rounded text-xs">Cmd/Ctrl + S</kbd>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">미리보기</span>
+                        <kbd class="px-2 py-1 bg-gray-100 rounded text-xs">Cmd/Ctrl + P</kbd>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">전체화면</span>
+                        <kbd class="px-2 py-1 bg-gray-100 rounded text-xs">F11</kbd>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Store original content -->
+<script>
+    const originalContent = {{ content | tojson }};
+</script>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let simplemde = null;
+let isEditMode = false;
+let hasChanges = false;
+
+// Render markdown on page load
+document.addEventListener('DOMContentLoaded', function() {
+    renderMarkdown(originalContent);
+});
+
+function renderMarkdown(content) {
+    document.getElementById('markdown-content').innerHTML = marked.parse(content || '*지침서가 비어있습니다. 편집 버튼을 눌러 작성해주세요.*');
+}
+
+// Enter edit mode
+function enterEditMode() {
+    isEditMode = true;
+
+    // Show/hide elements
+    document.getElementById('read-mode').classList.add('hidden');
+    document.getElementById('edit-mode').classList.remove('hidden');
+    document.getElementById('read-mode-buttons').classList.add('hidden');
+    document.getElementById('edit-mode-buttons').classList.remove('hidden');
+    document.getElementById('shortcuts-panel').classList.remove('hidden');
+    document.querySelectorAll('.edit-only').forEach(el => el.classList.remove('hidden'));
+
+    // Load SimpleMDE if not already loaded
+    if (!simplemde) {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/simplemde/latest/simplemde.min.js';
+        script.onload = initializeEditor;
+        document.head.appendChild(script);
+    } else {
+        simplemde.value(originalContent);
+    }
+}
+
+function initializeEditor() {
+    simplemde = new SimpleMDE({
+        element: document.getElementById("guidelines-editor"),
+        spellChecker: false,
+        autosave: {
+            enabled: true,
+            uniqueId: "linkedin-guidelines",
+            delay: 10000,
+        },
+        toolbar: [
+            "bold", "italic", "heading", "|",
+            "quote", "unordered-list", "ordered-list", "|",
+            "link", "table", "|",
+            "preview", "side-by-side", "fullscreen", "|",
+            "guide"
+        ],
+        placeholder: "LinkedIn 포스팅 지침서를 작성하세요...",
+        initialValue: originalContent,
+    });
+
+    // Track changes
+    simplemde.codemirror.on("change", function() {
+        hasChanges = true;
+        document.getElementById("save-status").textContent = "변경사항 있음";
+        document.getElementById("save-status").className = "text-sm text-orange-500";
+    });
+}
+
+// Cancel edit and return to read mode
+function cancelEdit() {
+    if (hasChanges && !confirm("변경사항이 있습니다. 취소하시겠습니까?")) {
+        return;
+    }
+
+    exitEditMode();
+}
+
+function exitEditMode() {
+    isEditMode = false;
+    hasChanges = false;
+
+    // Show/hide elements
+    document.getElementById('read-mode').classList.remove('hidden');
+    document.getElementById('edit-mode').classList.add('hidden');
+    document.getElementById('read-mode-buttons').classList.remove('hidden');
+    document.getElementById('edit-mode-buttons').classList.add('hidden');
+    document.getElementById('shortcuts-panel').classList.add('hidden');
+    document.querySelectorAll('.edit-only').forEach(el => el.classList.add('hidden'));
+}
+
+// Save guidelines
+async function saveGuidelines() {
+    if (!simplemde) return;
+
+    const btn = document.getElementById("save-btn");
+    const status = document.getElementById("save-status");
+
+    btn.disabled = true;
+    btn.innerHTML = '<svg class="animate-spin h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> 저장 중...';
+
+    try {
+        const newContent = simplemde.value();
+        const response = await fetch("/api/settings/linkedin-guidelines", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ content: newContent })
+        });
+
+        if (response.ok) {
+            hasChanges = false;
+            status.textContent = "저장됨 " + new Date().toLocaleTimeString();
+            status.className = "text-sm text-green-600";
+            showToast("지침서가 저장되었습니다", "success");
+
+            // Update the read view
+            renderMarkdown(newContent);
+
+            // Return to read mode after save
+            setTimeout(() => exitEditMode(), 500);
+        } else {
+            throw new Error("Save failed");
+        }
+    } catch (e) {
+        status.textContent = "저장 실패";
+        status.className = "text-sm text-red-500";
+        showToast("저장에 실패했습니다", "error");
+    }
+
+    btn.disabled = false;
+    btn.innerHTML = '<svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg> 저장';
+}
+
+// Restore from backup
+async function restoreBackup() {
+    if (!confirm("백업에서 복원하시겠습니까? 현재 편집 내용이 사라집니다.")) return;
+
+    try {
+        const response = await fetch("/api/settings/linkedin-guidelines/restore", {
+            method: "POST"
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            if (simplemde) {
+                simplemde.value(data.content);
+            }
+            showToast("백업에서 복원되었습니다", "success");
+        } else {
+            const err = await response.json();
+            showToast(err.detail || "복원 실패", "error");
+        }
+    } catch (e) {
+        showToast("복원에 실패했습니다", "error");
+    }
+}
+
+// Insert scenario template
+function insertScenario(scenario) {
+    if (!simplemde) return;
+
+    const templates = {
+        'A': `### 시나리오 A: 산업 분석 + 프레임워크
+
+**훅 스타일**: 충격적 숫자 + 방향성
+**본문 구조**: 현상 나열 → 프레임워크 추출 → 시사점 확장
+**마무리**: 본인 경험 연결 또는 선언
+`,
+        'B': `### 시나리오 B: 제품/도구 리뷰 + 실사용
+
+**훅 스타일**: 출시 팩트 + 임팩트
+**본문 구조**: 제품 설명 → 직접 사용 경험 → 왜 중요한지
+**마무리**: 가벼운 행동 선언
+`,
+        'C': `### 시나리오 C: 개인 실천 + 회고
+
+**훅 스타일**: 의외성 또는 행동 선언
+**본문 구조**: 맥락 → 행동 상세 → 인사이트 추출
+**마무리**: 자기 고백 또는 결심
+`,
+        'D': `### 시나리오 D: 시장 시그널 읽기
+
+**훅 스타일**: 메타 관찰 또는 시간축 대비
+**본문 구조**: 시간축 나열 → 패턴 추출 → 시그널 분석
+**마무리**: 변하지 않는 원칙
+`,
+        'E': `### 시나리오 E: 전략적 의사결정 공유
+
+**훅 스타일**: 결정 선언 + 역설
+**본문 구조**: 기존 포지션 → 변화 시그널 → 의사결정 논리
+**마무리**: 최종 결정 + 원칙
+`
+    };
+
+    const template = templates[scenario];
+    if (template) {
+        const cm = simplemde.codemirror;
+        const cursor = cm.getCursor();
+        cm.replaceRange(template, cursor);
+        showToast(`시나리오 ${scenario} 템플릿 삽입됨`, "info");
+    }
+}
+
+// Keyboard shortcut for save
+document.addEventListener("keydown", function(e) {
+    if ((e.metaKey || e.ctrlKey) && e.key === "s" && isEditMode) {
+        e.preventDefault();
+        saveGuidelines();
+    }
+});
+
+// Warn before leaving with unsaved changes
+window.addEventListener("beforeunload", function(e) {
+    if (hasChanges) {
+        e.preventDefault();
+        e.returnValue = "";
+    }
+});
+</script>
+{% endblock %}

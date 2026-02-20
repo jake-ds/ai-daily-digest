@@ -1,0 +1,37 @@
+{% if article %}
+<a href="/articles/{{ article.id }}" class="block bg-white rounded-lg shadow hover:shadow-md transition">
+    <div class="p-5">
+        <div class="flex items-start justify-between mb-3">
+            <span class="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded">
+                {{ article.category or 'unknown' }}
+            </span>
+            <span class="px-2 py-1 text-xs font-bold bg-blue-100 text-blue-800 rounded">
+                {{ "%.1f"|format(article.score) }}
+            </span>
+        </div>
+
+        <h3 class="font-semibold text-gray-900 line-clamp-2 mb-2">{{ article.title }}</h3>
+
+        <p class="text-sm text-gray-600 line-clamp-3 mb-3">
+            {{ article.ai_summary or article.summary or 'No summary available' }}
+        </p>
+
+        <div class="flex items-center justify-between text-xs text-gray-500">
+            <span>{{ article.source }}</span>
+            <span>{{ article.collected_at.strftime('%m/%d %H:%M') if article.collected_at else '' }}</span>
+        </div>
+
+        {% if article.linkedin_status != 'none' %}
+        <div class="mt-3 pt-3 border-t">
+            <span class="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded">
+                {% if article.linkedin_status == 'generated' %}
+                Draft Generated
+                {% else %}
+                Posted
+                {% endif %}
+            </span>
+        </div>
+        {% endif %}
+    </div>
+</a>
+{% endif %}
