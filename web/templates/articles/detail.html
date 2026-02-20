@@ -142,8 +142,10 @@
             <div class="flex items-start">
                 <span class="text-2xl mr-3">&#x1F4A1;</span>
                 <div class="flex-1">
-                    <div class="font-medium text-blue-900">추천 시나리오: {{ recommended_scenario }}</div>
-                    <div class="text-sm text-blue-700 mt-1">{{ scenarios[recommended_scenario].name }}</div>
+                    <div class="font-medium text-blue-900">추천 시나리오: {{ recommended_scenario }} - {{ scenarios[recommended_scenario].name }}</div>
+                    {% if scenario_reason %}
+                    <div class="text-sm text-blue-700 mt-1">{{ scenario_reason }}</div>
+                    {% endif %}
                     <div class="text-sm text-blue-600 mt-1">{{ scenarios[recommended_scenario].description }}</div>
                 </div>
             </div>

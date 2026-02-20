@@ -199,10 +199,10 @@ async def article_detail(
             status_code=404,
         )
 
-    # Detect recommended scenario
+    # Detect recommended scenario (Claude-based with fallback)
     from web.services.linkedin_service import LinkedInService
     linkedin_service = LinkedInService(db)
-    recommended_scenario = linkedin_service.detect_scenario(article)
+    scenario_result = linkedin_service.detect_scenario_detailed(article)
 
     return templates.TemplateResponse(
         "articles/detail.html",
@@ -211,7 +211,9 @@ async def article_detail(
             "article": article,
             "scenarios": SCENARIOS,
             "drafts": article.linkedin_drafts,
-            "recommended_scenario": recommended_scenario,
+            "recommended_scenario": scenario_result["scenario"],
+            "scenario_reason": scenario_result.get("reason", ""),
+            "scenario_confidence": scenario_result.get("confidence", 0),
         },
     )
 

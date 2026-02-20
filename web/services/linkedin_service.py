@@ -1,5 +1,6 @@
 """LinkedIn service with Jake's guidelines for post generation."""
 
+import json
 import re
 import sys
 from pathlib import Path
@@ -78,32 +79,97 @@ class LinkedInService:
         except FileNotFoundError:
             return ""
 
+    # 시나리오 감지 결과 캐시 (article_id -> {scenario, confidence, reason})
+    _scenario_cache: dict = {}
+
     def detect_scenario(self, article: Article) -> str:
-        """Detect the best scenario for an article."""
+        """Detect the best scenario for an article (returns scenario letter only)."""
+        result = self.detect_scenario_detailed(article)
+        return result["scenario"]
+
+    def detect_scenario_detailed(self, article: Article) -> dict:
+        """Detect the best scenario using Claude API, with keyword fallback.
+
+        Returns:
+            dict: {scenario: str, confidence: float, reason: str}
+        """
+        # 캐시 확인
+        if article.id in self._scenario_cache:
+            return self._scenario_cache[article.id]
+
+        # Claude API 기반 분석 시도
+        try:
+            result = self._detect_scenario_with_claude(article)
+            self._scenario_cache[article.id] = result
+            return result
+        except Exception:
+            # API 실패 시 키워드 기반 폴백
+            scenario = self._detect_scenario_keyword(article)
+            result = {"scenario": scenario, "confidence": 0.5, "reason": "키워드 기반 자동 감지 (AI 분석 실패)"}
+            self._scenario_cache[article.id] = result
+            return result
+
+    def _detect_scenario_with_claude(self, article: Article) -> dict:
+        """Use Claude API to analyze article and detect best scenario."""
+        scenarios_desc = "\n".join(
+            f"- {key}: {val['name']} - {val['description']}"
+            for key, val in SCENARIOS.items()
+        )
+
+        prompt = f"""다음 기사에 가장 적합한 LinkedIn 포스팅 시나리오(A-F)를 분석해주세요.
+
+## 기사
+- 제목: {article.title}
+- 출처: {article.source or '알 수 없음'}
+- 요약: {article.ai_summary or article.summary or '없음'}
+
+## 시나리오 목록
+{scenarios_desc}
+
+## 출력 형식 (JSON만 출력)
+{{"scenario": "A", "confidence": 0.85, "reason": "이 기사가 해당 시나리오에 적합한 이유를 한 문장으로"}}"""
+
+        response = self.client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=200,
+            messages=[{"role": "user", "content": prompt}],
+        )
+
+        raw = response.content[0].text
+        json_start = raw.find("{")
+        json_end = raw.rfind("}") + 1
+        if json_start >= 0 and json_end > json_start:
+            data = json.loads(raw[json_start:json_end])
+            scenario = data.get("scenario", "A")
+            if scenario not in SCENARIOS:
+                scenario = "A"
+            return {
+                "scenario": scenario,
+                "confidence": float(data.get("confidence", 0.8)),
+                "reason": data.get("reason", ""),
+            }
+
+        raise ValueError("Failed to parse Claude response")
+
+    def _detect_scenario_keyword(self, article: Article) -> str:
+        """Keyword-based scenario detection (fallback)."""
         title = article.title.lower()
         summary = (article.ai_summary or article.summary or "").lower()
         content = f"{title} {summary}"
 
-        # Scenario detection heuristics
         if any(kw in content for kw in ["출시", "release", "launch", "announced", "공개"]):
-            return "B"  # Product review
-
+            return "B"
         if any(kw in content for kw in ["연구", "paper", "research", "study", "논문"]):
-            return "A"  # Industry analysis
-
+            return "A"
         if any(kw in content for kw in ["결정", "decision", "선택", "chose", "pivot"]):
-            return "E"  # Strategic decision
-
+            return "E"
         if any(kw in content for kw in ["트렌드", "trend", "시장", "market", "signal"]):
-            return "D"  # Market signal
-
+            return "D"
         if any(kw in content for kw in ["경험", "experience", "learned", "배운"]):
-            return "C"  # Personal practice
-
+            return "C"
         if any(kw in content for kw in ["권위자", "expert", "통념", "학습", "fomo", "배워야", "역설", "misconception", "myth", "contrary"]):
-            return "F"  # Authority perspective + paradoxical insight
+            return "F"
 
-        # Default based on category
         category_map = {
             "bigtech": "B",
             "research": "A",
