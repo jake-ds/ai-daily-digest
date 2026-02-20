@@ -6,6 +6,20 @@ Started: 2026년 2월 21일 토요일 03시 32분 43초 KST
 - `web/api/linkedin.py` has regex validators for scenario parameter (e.g., `^[A-F]$`) - update when adding scenarios
 - `detect_scenario()` uses keyword-based heuristics with priority ordering (first match wins)
 - Always `python -m py_compile` after editing Python files
+- ReferencePost model: `web/models/reference_post.py` - content, author, source_url, analysis fields
+- Guidelines examples in markdown use pattern: `### 시나리오 X 예시` followed by code block
+- Both LinkedInService and LinkedInAgent need parallel changes for prompt improvements
+---
+
+## 2026-02-21 - LQ-003
+- Added `_get_reference_examples(scenario)` to both LinkedInService and LinkedInAgent
+- DB reference posts (max 2) + guidelines example extraction via regex
+- Included as "참고 예시" section in prompts for both simple and agent mode
+- Files changed: web/services/linkedin_service.py, web/services/linkedin_agent.py
+- **Learnings for future iterations:**
+  - ReferencePost has no scenario column - currently gets most recent posts regardless of scenario
+  - Guidelines examples use `### 시나리오 X 예시` + code blocks - regex pattern extracts content between ```
+  - Changes to prompt building in linkedin_service.py usually need mirror changes in linkedin_agent.py
 ---
 
 ## 2026-02-21 - LQ-002

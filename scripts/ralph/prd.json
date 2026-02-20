@@ -45,7 +45,7 @@
         "python -m py_compile 통과"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "notes": "ReferencePost 모델은 web/models/reference_post.py에 있음. from web.models import ReferencePost로 import"
     },
     {
