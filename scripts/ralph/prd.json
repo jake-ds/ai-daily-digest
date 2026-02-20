@@ -61,7 +61,7 @@
         "python -m py_compile 통과"
       ],
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "notes": "Article 모델에 score, viral_score, category, source 필드 모두 존재"
     },
     {

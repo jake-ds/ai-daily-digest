@@ -11,6 +11,18 @@ Started: 2026년 2월 21일 토요일 03시 32분 43초 KST
 - Both LinkedInService and LinkedInAgent need parallel changes for prompt improvements
 ---
 
+## 2026-02-21 - LQ-004
+- Added `_build_article_context()` to both LinkedInService and LinkedInAgent
+- Includes: category, score (with tone guide), viral_score (with context), authority source detection
+- Score >= 8: "깊은 분석" guide, Score <= 5: "간결한 코멘터리" guide
+- Authority sources: MIT, Stanford, Google, DeepMind, OpenAI, Anthropic, Meta AI, Microsoft Research
+- Applied in simple mode (_build_prompt) and agent mode (_step_analyze, _step_draft)
+- Files changed: web/services/linkedin_service.py, web/services/linkedin_agent.py
+- **Learnings for future iterations:**
+  - Article model fields: score (Float), viral_score (Float, nullable), category (String), source (String)
+  - _build_article_context() is a shared pattern now used by both service and agent
+---
+
 ## 2026-02-21 - LQ-003
 - Added `_get_reference_examples(scenario)` to both LinkedInService and LinkedInAgent
 - DB reference posts (max 2) + guidelines example extraction via regex
