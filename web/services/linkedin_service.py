@@ -233,6 +233,9 @@ class LinkedInService:
         Returns:
             LinkedInDraft record
         """
+        # 매 생성 시 지침서를 새로 로드 (hot-reload)
+        self.guidelines = self._load_guidelines()
+
         if scenario is None:
             scenario = self.detect_scenario(article)
 

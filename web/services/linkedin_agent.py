@@ -347,6 +347,9 @@ class LinkedInAgent:
         session.current_step = 2
         yield self._sse("step_start", {"step": 2, "name": "가이드라인 검토"})
 
+        # 매번 파일에서 새로 로드 (hot-reload)
+        guidelines = self._load_guidelines() or guidelines
+
         guidelines_text = guidelines if guidelines else "지침서가 설정되지 않았습니다. 기본 규칙을 적용합니다."
 
         prompt = f"""LinkedIn 포스팅 지침서를 검토하고, 이번 포스팅에 적용할 규칙 체크리스트를 만들어주세요.
