@@ -9,6 +9,23 @@ Started: 2026년 2월 21일 토요일 03시 32분 43초 KST
 - ReferencePost model: `web/models/reference_post.py` - content, author, source_url, analysis fields
 - Guidelines examples in markdown use pattern: `### 시나리오 X 예시` followed by code block
 - Both LinkedInService and LinkedInAgent need parallel changes for prompt improvements
+- detect_scenario() returns str, detect_scenario_detailed() returns dict with reason
+- _scenario_cache (class var) caches Claude API results by article_id
+---
+
+## 2026-02-21 - LQ-008
+- Upgraded detect_scenario() to use Claude API (claude-haiku-4-5-20251001) with keyword fallback
+- Added detect_scenario_detailed() returning {scenario, confidence, reason}
+- detect_scenario() now delegates to detect_scenario_detailed() for backward compatibility
+- In-memory cache (_scenario_cache) prevents duplicate API calls for same article_id
+- web/app.py passes scenario_reason and scenario_confidence to template
+- Template shows reason text below recommended scenario
+- Files changed: web/services/linkedin_service.py, web/app.py, web/templates/articles/detail.html
+- **Learnings for future iterations:**
+  - Uses claude-haiku for cost efficiency in scenario detection
+  - _scenario_cache is a class variable (shared across instances) - dict keyed by article.id
+  - detect_scenario() still returns str for backward compat; detect_scenario_detailed() returns full dict
+  - Template uses `{% if scenario_reason %}` guard for graceful display
 ---
 
 ## 2026-02-21 - LQ-007

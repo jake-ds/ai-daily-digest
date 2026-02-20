@@ -124,7 +124,7 @@
         "python -m py_compile 통과"
       ],
       "priority": 8,
-      "passes": false,
+      "passes": true,
       "notes": "비용 고려: claude-haiku 사용 권장. 시나리오 선택 가이드는 data/linkedin_guidelines.md 하단에 있음"
     },
     {
