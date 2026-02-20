@@ -1,0 +1,162 @@
+{
+  "project": "AI Daily Digest",
+  "branchName": "ralph/dashboard-tags-performance",
+  "description": "대시보드 시각화 개선, 기사 태그/북마크 시스템, LinkedIn 성과 추적 기능 추가",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Add Tag model and database table",
+      "description": "기사에 태그를 달기 위한 Tag 모델과 article_tags 다대다 관계 테이블을 생성한다.",
+      "acceptanceCriteria": [
+        "web/models/tag.py에 Tag 모델 생성 (id, name, color, created_at)",
+        "article_tags association table 생성 (article_id, tag_id)",
+        "Article 모델에 tags relationship 추가",
+        "web/models/__init__.py에 Tag export 추가",
+        "web/database.py의 init_db()에 tag import 추가",
+        "python -m py_compile 통과"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": "기존 Article 모델은 web/models/article.py에 있음. Base는 web/database.py에서 import"
+    },
+    {
+      "id": "US-002",
+      "title": "Add tag CRUD API endpoints",
+      "description": "태그 생성, 조회, 삭제, 기사에 태그 부착/제거 API를 만든다.",
+      "acceptanceCriteria": [
+        "GET /api/tags - 전체 태그 목록",
+        "POST /api/tags - 태그 생성 (name, color)",
+        "DELETE /api/tags/{tag_id} - 태그 삭제",
+        "POST /api/articles/{article_id}/tags/{tag_id} - 기사에 태그 부착",
+        "DELETE /api/articles/{article_id}/tags/{tag_id} - 기사에서 태그 제거",
+        "web/api/tags.py 신규 생성, web/api/__init__.py에 등록, web/app.py에 router 포함",
+        "python -m py_compile 통과"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "기존 API 패턴은 web/api/linkedin.py 참고. router prefix는 /api/tags"
+    },
+    {
+      "id": "US-003",
+      "title": "Add tag UI to article detail page",
+      "description": "기사 상세 페이지에서 태그를 보고, 추가/제거할 수 있는 UI를 만든다.",
+      "acceptanceCriteria": [
+        "기사 헤더 영역에 현재 태그 배지 표시 (색상 포함)",
+        "태그 추가 드롭다운 (기존 태그 선택 또는 새 태그 생성)",
+        "태그 배지 클릭 시 제거 가능",
+        "HTMX 또는 fetch로 비동기 처리",
+        "web/templates/articles/detail.html 수정"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "Tailwind CSS 사용. 태그 색상은 bg-{color}-100 text-{color}-700 패턴"
+    },
+    {
+      "id": "US-004",
+      "title": "Add tag filter to articles list page",
+      "description": "기사 목록에서 태그로 필터링할 수 있도록 한다.",
+      "acceptanceCriteria": [
+        "기존 필터 영역에 태그 필터 추가",
+        "여러 태그 동시 선택 가능",
+        "URL 파라미터로 태그 필터 유지 (?tags=tag1,tag2)",
+        "web/app.py의 articles_list 라우트에 태그 필터 로직 추가",
+        "기사 카드에 태그 배지 표시",
+        "python -m py_compile 통과"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "기존 필터: category, date_range, min_score, favorite, unread"
+    },
+    {
+      "id": "US-005",
+      "title": "Add LinkedIn performance fields to model",
+      "description": "LinkedInDraft 모델에 성과 추적 필드를 추가한다.",
+      "acceptanceCriteria": [
+        "LinkedInDraft에 컬럼 추가: impressions(Integer), likes(Integer), comments(Integer), reposts(Integer), engagement_rate(Float), performance_updated_at(DateTime)",
+        "web/database.py의 migrate_db()에 ALTER TABLE 추가",
+        "LinkedInDraft.to_dict()에 새 필드 포함",
+        "python -m py_compile 통과"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": "migrate_db() 패턴 참고: 기존 컬럼 체크 후 없으면 ALTER TABLE"
+    },
+    {
+      "id": "US-006",
+      "title": "Add performance input UI to post detail",
+      "description": "포스트 상세 페이지에서 LinkedIn 성과 수치를 입력/수정할 수 있게 한다.",
+      "acceptanceCriteria": [
+        "포스트 상세 사이드바에 성과 입력 섹션 추가",
+        "입력 필드: 노출수, 좋아요, 댓글, 리포스트",
+        "저장 시 PATCH /api/linkedin/posts/{id}로 전송",
+        "참여율 자동 계산 ((likes+comments+reposts)/impressions*100)",
+        "web/api/linkedin.py의 PostUpdate 모델에 성과 필드 추가",
+        "web/templates/posts/detail.html 수정",
+        "python -m py_compile 통과"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": "기존 PostUpdate은 status, linkedin_url만 있음. PATCH 엔드포인트 확장 필요"
+    },
+    {
+      "id": "US-007",
+      "title": "Add performance summary to posts list",
+      "description": "포스트 목록에서 성과 수치를 한눈에 볼 수 있게 한다.",
+      "acceptanceCriteria": [
+        "포스트 카드에 성과 수치 표시 (노출수, 좋아요, 댓글)",
+        "published 상태이고 성과 데이터가 있는 경우만 표시",
+        "성과 없는 경우 '성과 입력' 버튼 표시",
+        "web/templates/posts/list.html 수정"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-008",
+      "title": "Add dashboard statistics cards",
+      "description": "대시보드에 주요 통계 카드를 추가한다: 총 기사 수, 이번 주 수집, LinkedIn 초안 수, 발행 수.",
+      "acceptanceCriteria": [
+        "4개 통계 카드: 전체 기사 수, 이번 주 수집 수, LinkedIn 초안 수, 발행된 포스트 수",
+        "각 카드에 지난 주 대비 증감 표시 (화살표 + 퍼센트)",
+        "web/services/digest_service.py의 get_today_stats() 확장 또는 새 메서드",
+        "web/templates/index.html 수정",
+        "python -m py_compile 통과"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": "기존 get_today_stats()는 오늘 기사 수만 반환. LinkedInDraft 쿼리 추가 필요"
+    },
+    {
+      "id": "US-009",
+      "title": "Add daily article collection chart",
+      "description": "대시보드에 최근 14일간 일별 기사 수집 추이 차트를 추가한다.",
+      "acceptanceCriteria": [
+        "최근 14일간 일별 수집 기사 수 바 차트",
+        "Chart.js 또는 순수 CSS/SVG로 구현 (외부 라이브러리 최소화)",
+        "차트 데이터 제공 API: GET /api/digest/stats/daily",
+        "web/api/digest.py에 엔드포인트 추가",
+        "web/templates/index.html에 차트 영역 추가",
+        "python -m py_compile 통과"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": "CDN으로 Chart.js 로드하면 간편. 기존에 Tailwind CDN, HTMX CDN 사용 중"
+    },
+    {
+      "id": "US-010",
+      "title": "Add category distribution and LinkedIn performance charts",
+      "description": "대시보드에 카테고리 분포 도넛 차트와 LinkedIn 성과 추이 차트를 추가한다.",
+      "acceptanceCriteria": [
+        "카테고리별 기사 수 도넛/파이 차트",
+        "LinkedIn 포스트 성과 추이 차트 (최근 발행 포스트의 노출수/좋아요)",
+        "차트 데이터 API: GET /api/digest/stats/categories, GET /api/linkedin/posts/stats",
+        "web/templates/index.html에 차트 2개 추가 (그리드 레이아웃)",
+        "python -m py_compile 통과"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": "US-009에서 Chart.js가 이미 로드되어 있을 것. 같은 방식으로 추가"
+    }
+  ]
+}
