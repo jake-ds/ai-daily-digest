@@ -91,7 +91,7 @@
         "python -m py_compile 통과"
       ],
       "priority": 6,
-      "passes": false,
+      "passes": true,
       "notes": "session.guidelines_checklist는 Step 2에서 생성됨"
     },
     {

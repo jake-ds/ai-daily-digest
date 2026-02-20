@@ -11,6 +11,16 @@ Started: 2026년 2월 21일 토요일 03시 32분 43초 KST
 - Both LinkedInService and LinkedInAgent need parallel changes for prompt improvements
 ---
 
+## 2026-02-21 - LQ-006
+- Replaced hardcoded 6-item review checklist with session.guidelines_checklist from Step 2
+- User feedback now highlighted as "반드시 반영할 사항" with emphasis
+- Prompt now says "다음 체크리스트의 모든 항목을 검증하고, 위반 사항을 반드시 수정하세요"
+- Files changed: web/services/linkedin_agent.py
+- **Learnings for future iterations:**
+  - session.guidelines_checklist is created in _step_guidelines_check (Step 2) and stored in AgentSession
+  - User feedback (session.user_feedback) only applied on first iteration (i == 0)
+---
+
 ## 2026-02-21 - LQ-005
 - Added `_validate_draft(content, article_url)` method to LinkedInService
 - Validates: char count (1200-1800), forbidden words, emoji check, article URL presence
