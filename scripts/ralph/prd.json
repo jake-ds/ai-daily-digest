@@ -154,7 +154,7 @@
         "python -m py_compile 통과"
       ],
       "priority": 10,
-      "passes": false,
+      "passes": true,
       "notes": "data/linkedin_guidelines.md의 공통 규칙, 권장 사항 섹션 참고"
     }
   ]

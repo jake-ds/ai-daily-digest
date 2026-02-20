@@ -13,6 +13,16 @@ Started: 2026년 2월 21일 토요일 03시 32분 43초 KST
 - _scenario_cache (class var) caches Claude API results by article_id
 ---
 
+## 2026-02-21 - LQ-010
+- Enhanced prompts with LinkedIn formatting rules: 줄바꿈 단락 구분, 짧은 문장, 넘버링, 구분선
+- Added strong length constraint: "반드시 1200자 이상 1800자 이하, 이상적 1400-1600자"
+- Output format: "제목/헤더 없이 본문만, 첫 줄이 훅, 마지막에 원문 링크 한 줄"
+- Added anti-pattern section: 일반적 서론, ~에 대해 이야기, 결론적으로~, 요약하면~ 금지
+- Applied to both simple mode (_build_prompt) and agent mode (_step_draft)
+- Files changed: web/services/linkedin_service.py, web/services/linkedin_agent.py
+- **Learnings:** Prompt sections are modular - formatting, length, output format, anti-patterns all separate
+---
+
 ## 2026-02-21 - LQ-009
 - Added hot-reload: `self.guidelines = self._load_guidelines()` at start of generate_draft()
 - Agent _step_guidelines_check() also reloads from file: `guidelines = self._load_guidelines() or guidelines`
