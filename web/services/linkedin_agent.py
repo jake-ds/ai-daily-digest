@@ -176,9 +176,54 @@ class LinkedInAgent:
             async for event in self._step_review(session, guidelines):
                 yield event
 
-            # Step 5: 가이드라인 평가
+            # Step 5: 가이드라인 평가 + 자동 수정 루프
             async for event in self._step_evaluate(session, guidelines):
                 yield event
+
+            # 평가 결과 분석 → 점수 < 70 또는 FAIL >= 3이면 자동 수정
+            needs_retry = False
+            try:
+                eval_data = json.loads(session.evaluation)
+                overall_score = eval_data.get("overall_score", 100)
+                fail_items = [item for item in eval_data.get("items", []) if not item.get("pass", True)]
+                if overall_score < 70 or len(fail_items) >= 3:
+                    needs_retry = True
+            except (json.JSONDecodeError, KeyError):
+                pass
+
+            if needs_retry:
+                yield self._sse("retry_start", {"reason": f"점수 {overall_score}, FAIL {len(fail_items)}개"})
+
+                # FAIL 항목 수정 프롬프트
+                fail_descriptions = "\n".join(
+                    f"- [{item.get('category', '')}] {item.get('rule', '')}: {item.get('comment', '')}"
+                    for item in fail_items
+                )
+                fix_prompt = f"""다음 LinkedIn 포스트에서 평가에서 FAIL된 항목만 수정해주세요.
+
+## 현재 초안
+{session.improved_draft or session.draft}
+
+## FAIL 항목 (반드시 수정)
+{fail_descriptions}
+
+## 중요
+- FAIL 항목만 수정하고, 잘 된 부분은 그대로 유지하세요
+- LinkedIn 포스트 본문만 출력하세요
+- 설명 없이 바로 사용 가능한 형태"""
+
+                fixed_draft = await self._call_claude_streaming(fix_prompt, session, step=5)
+                pre_retry_draft = session.improved_draft or session.draft
+                session.improved_draft = fixed_draft
+
+                # 재평가 (1회만)
+                async for event in self._step_evaluate(session, guidelines):
+                    yield event
+
+                yield self._sse("retry_complete", {
+                    "pre_retry_draft": pre_retry_draft[:200] + "...",
+                    "post_retry_draft": fixed_draft[:200] + "...",
+                })
 
             # Save to database
             draft_record = self._save_draft(session, article)
