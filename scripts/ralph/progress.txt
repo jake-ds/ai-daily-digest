@@ -11,6 +11,19 @@ Started: 2026년 2월 21일 토요일 03시 32분 43초 KST
 - Both LinkedInService and LinkedInAgent need parallel changes for prompt improvements
 ---
 
+## 2026-02-21 - LQ-007
+- Added evaluation-driven retry in agent mode run() method
+- After _step_evaluate(), parses JSON: checks overall_score < 70 or FAIL items >= 3
+- Auto-generates fix prompt with FAIL items listed, regenerates, then re-evaluates (max 1 retry)
+- SSE events: 'retry_start' and 'retry_complete' sent for frontend tracking
+- Pre-retry and post-retry drafts both tracked
+- Files changed: web/services/linkedin_agent.py
+- **Learnings for future iterations:**
+  - Evaluation JSON: {overall_score: int, items: [{category, rule, pass, comment}], summary: str}
+  - Retry logic is in run() after _step_evaluate(), not inside _step_evaluate itself
+  - _step_evaluate() can be called multiple times (original + retry)
+---
+
 ## 2026-02-21 - LQ-006
 - Replaced hardcoded 6-item review checklist with session.guidelines_checklist from Step 2
 - User feedback now highlighted as "반드시 반영할 사항" with emphasis

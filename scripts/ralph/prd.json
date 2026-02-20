@@ -107,7 +107,7 @@
         "python -m py_compile 통과"
       ],
       "priority": 7,
-      "passes": false,
+      "passes": true,
       "notes": "evaluation JSON 구조: {overall_score: int, items: [{pass: bool, ...}]}"
     },
     {
