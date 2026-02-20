@@ -52,6 +52,13 @@ SCENARIOS = {
         "structure": "기존 포지션 → 변화 시그널 → 의사결정 논리",
         "closing": "최종 결정 + 원칙",
     },
+    "F": {
+        "name": "권위자 관점 + 역설적 인사이트",
+        "description": "독자 고민 공감 후 권위자의 반대 관점을 제시하여 인사이트 전달",
+        "hook_style": "공감형 + 반전: 독자 고민 공감 → 권위자의 반대 관점 제시",
+        "structure": "권위자 소개 + 핵심 관점 → 3개 핵심 포인트 논증 (넘버링) → 구체적 인용구와 메타포 → 실행 가능한 가이드",
+        "closing": "격려형 + 리프레이밍",
+    },
 }
 
 
@@ -92,6 +99,9 @@ class LinkedInService:
         if any(kw in content for kw in ["경험", "experience", "learned", "배운"]):
             return "C"  # Personal practice
 
+        if any(kw in content for kw in ["권위자", "expert", "통념", "학습", "fomo", "배워야", "역설", "misconception", "myth", "contrary"]):
+            return "F"  # Authority perspective + paradoxical insight
+
         # Default based on category
         category_map = {
             "bigtech": "B",
@@ -112,7 +122,7 @@ class LinkedInService:
 
         Args:
             article: Article to generate draft for
-            scenario: Scenario (A-E), auto-detected if not provided
+            scenario: Scenario (A-F), auto-detected if not provided
 
         Returns:
             LinkedInDraft record
