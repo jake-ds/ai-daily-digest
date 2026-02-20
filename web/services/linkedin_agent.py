@@ -399,7 +399,10 @@ class LinkedInAgent:
 
             feedback_section = ""
             if session.user_feedback and i == 0:
-                feedback_section = f"\n## 사용자 피드백\n{session.user_feedback}\n이 피드백을 반드시 반영하세요."
+                feedback_section = f"""
+## 반드시 반영할 사항 (사용자 피드백)
+다음 피드백을 반드시 반영하세요. 이것은 최우선 수정 사항입니다:
+{session.user_feedback}"""
 
             prompt = f"""다음 LinkedIn 포스트 초안을 검토하고 개선해주세요.
 
@@ -407,16 +410,10 @@ class LinkedInAgent:
 {current_draft}
 {feedback_section}
 
-## 적용 규칙
-{session.guidelines_checklist}
+## 가이드라인 체크리스트
+다음 체크리스트의 모든 항목을 검증하고, 위반 사항을 반드시 수정하세요:
 
-## 검토 항목
-1. 훅이 충분히 강력한가?
-2. 본문 구조가 시나리오에 맞는가?
-3. 금지사항을 위반하지 않았는가?
-4. 길이가 적절한가 (1200-1800자)?
-5. 마무리가 자연스러운가?
-6. 원문 링크가 포함되어 있는가?
+{session.guidelines_checklist}
 
 ## 출력 형식
 먼저 [검토 노트]를 작성하고, 그 다음 [개선된 초안]을 작성하세요.
