@@ -11,6 +11,19 @@ Started: 2026년 2월 21일 토요일 03시 32분 43초 KST
 - Both LinkedInService and LinkedInAgent need parallel changes for prompt improvements
 ---
 
+## 2026-02-21 - LQ-005
+- Added `_validate_draft(content, article_url)` method to LinkedInService
+- Validates: char count (1200-1800), forbidden words, emoji check, article URL presence
+- `generate_draft()` now calls validation and auto-retries up to 2 times with fix prompt
+- FORBIDDEN_WORDS class constant: 여러분, 혁명, 패러다임 시프트, 게임체인저, 하세요, 해보세요, 읽어주셔서 감사
+- Emoji check uses `unicodedata.category` to detect Symbol_Other chars
+- Files changed: web/services/linkedin_service.py
+- **Learnings for future iterations:**
+  - Emoji detection: `unicodedata.category(char).startswith("So")` covers most emoji symbols
+  - Validation loop pattern: for attempt in range(max_retries), break on valid
+  - Fix prompt includes current draft + specific issues for targeted correction
+---
+
 ## 2026-02-21 - LQ-004
 - Added `_build_article_context()` to both LinkedInService and LinkedInAgent
 - Includes: category, score (with tone guide), viral_score (with context), authority source detection
