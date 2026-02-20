@@ -113,6 +113,45 @@ class LinkedInService:
         }
         return category_map.get(article.category, "A")
 
+    # 금지어 목록
+    FORBIDDEN_WORDS = [
+        "여러분", "혁명", "패러다임 시프트", "게임체인저",
+        "하세요", "해보세요", "읽어주셔서 감사",
+    ]
+
+    def _validate_draft(self, content: str, article_url: str) -> dict:
+        """Validate a generated draft against quality rules."""
+        issues = []
+        char_count = len(content)
+
+        # 1. 글자수 검증 (1200-1800)
+        if char_count < 1200:
+            issues.append(f"글자수 부족: {char_count}자 (최소 1200자 필요)")
+        elif char_count > 1800:
+            issues.append(f"글자수 초과: {char_count}자 (최대 1800자)")
+
+        # 2. 금지어 체크
+        for word in self.FORBIDDEN_WORDS:
+            if word in content:
+                issues.append(f"금지어 포함: '{word}'")
+
+        # 이모지 체크
+        import unicodedata
+        for char in content:
+            if unicodedata.category(char).startswith("So"):
+                issues.append("이모지 포함됨")
+                break
+
+        # 3. 원문 링크 포함 여부
+        if article_url and article_url not in content:
+            issues.append("원문 링크가 포함되지 않음")
+
+        return {
+            "valid": len(issues) == 0,
+            "issues": issues,
+            "char_count": char_count,
+        }
+
     def generate_draft(
         self,
         article: Article,
@@ -144,6 +183,35 @@ class LinkedInService:
         )
 
         draft_content = response.content[0].text
+
+        # 품질 검증 및 자동 재생성 (최대 2회)
+        max_retries = 2
+        for attempt in range(max_retries):
+            validation = self._validate_draft(draft_content, article.url)
+            if validation["valid"]:
+                break
+
+            # 수정 프롬프트로 재생성
+            issues_text = "\n".join(f"- {issue}" for issue in validation["issues"])
+            fix_prompt = f"""다음 LinkedIn 포스트에 문제가 발견되었습니다. 아래 이슈를 수정해서 다시 작성해주세요.
+
+## 현재 초안
+{draft_content}
+
+## 발견된 문제
+{issues_text}
+
+## 수정 요청
+위 문제를 모두 수정하여 LinkedIn 포스트 본문만 다시 출력해주세요.
+설명 없이 바로 사용 가능한 형태로 작성하세요.
+마지막에 원문 링크를 포함하세요: {article.url}"""
+
+            response = self.client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=2000,
+                messages=[{"role": "user", "content": fix_prompt}],
+            )
+            draft_content = response.content[0].text
 
         # Get next version number
         existing_drafts = (
