@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block title %}Posts - AI Daily Digest{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex justify-between items-center">
+        <h1 class="text-2xl font-bold text-gray-900">Posts</h1>
+        <div class="flex items-center gap-2">
+            <span class="text-sm text-gray-500">{{ posts|length }} total</span>
+        </div>
+    </div>
+
+    <!-- Filter Tabs -->
+    <div class="border-b border-gray-200">
+        <nav class="-mb-px flex space-x-8">
+            <a href="/posts"
+               class="{% if not current_status %}border-blue-500 text-blue-600{% else %}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{% endif %} whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">
+                All
+            </a>
+            <a href="/posts?status=final"
+               class="{% if current_status == 'final' %}border-blue-500 text-blue-600{% else %}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{% endif %} whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">
+                Final
+            </a>
+            <a href="/posts?status=published"
+               class="{% if current_status == 'published' %}border-blue-500 text-blue-600{% else %}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{% endif %} whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">
+                Published
+            </a>
+        </nav>
+    </div>
+
+    <!-- Posts Grid -->
+    {% if posts %}
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {% for post in posts %}
+        <div class="bg-white rounded-lg shadow hover:shadow-md transition">
+            <div class="p-5">
+                <div class="flex items-start justify-between mb-3">
+                    <div class="flex items-center gap-2">
+                        <span class="px-2 py-1 text-xs font-medium bg-purple-100 text-purple-800 rounded">
+                            Scenario {{ post.scenario }}
+                        </span>
+                        {% if post.generation_mode == 'agent' %}
+                        <span class="px-2 py-1 text-xs font-medium bg-purple-50 text-purple-600 rounded">Agent</span>
+                        {% endif %}
+                    </div>
+                    <div class="flex items-center gap-2">
+                        {% if post.status == 'final' %}
+                        <span class="px-2 py-1 text-xs font-medium bg-green-100 text-green-700 rounded">Final</span>
+                        {% elif post.status == 'published' %}
+                        <span class="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded">Published</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {% if post.article %}
+                <div class="mb-2">
+                    <a href="/articles/{{ post.article.id }}" class="text-sm text-blue-600 hover:text-blue-800">
+                        {{ post.article.title }}
+                    </a>
+                </div>
+                {% endif %}
+
+                <p class="text-sm text-gray-700 line-clamp-4 mb-3 whitespace-pre-wrap">{{ post.draft_content[:300] }}{% if post.draft_content|length > 300 %}...{% endif %}</p>
+
+                <div class="flex items-center justify-between text-xs text-gray-500">
+                    <span>{{ post.created_at.strftime('%Y-%m-%d %H:%M') if post.created_at else '' }}</span>
+                    <div class="flex items-center gap-2">
+                        <button onclick="copyToClipboard(`{{ post.draft_content|replace('`', '\\`')|replace('\n', '\\n') }}`)"
+                                class="px-2 py-1 bg-gray-100 rounded hover:bg-gray-200">Copy</button>
+                        <a href="/posts/{{ post.id }}" class="px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200">Detail</a>
+                    </div>
+                </div>
+
+                {% if post.linkedin_url %}
+                <div class="mt-3 pt-3 border-t">
+                    <a href="{{ post.linkedin_url }}" target="_blank" rel="noopener"
+                       class="text-xs text-blue-600 hover:text-blue-800 flex items-center">
+                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                        </svg>
+                        LinkedIn Post
+                    </a>
+                </div>
+                {% elif post.status == 'final' %}
+                <div class="mt-3 pt-3 border-t">
+                    <div class="flex items-center gap-2">
+                        <input type="text" id="url-input-{{ post.id }}" placeholder="LinkedIn URL 입력..."
+                               class="flex-1 text-xs border rounded px-2 py-1">
+                        <button onclick="publishPost({{ post.id }})"
+                                class="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">Publish</button>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="bg-white rounded-lg shadow p-8 text-center">
+        <p class="text-gray-500">No posts yet. Generate LinkedIn drafts from articles and finalize them.</p>
+        <a href="/articles" class="mt-4 inline-block text-blue-600 hover:text-blue-800">Browse Articles</a>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+async function publishPost(postId) {
+    const urlInput = document.getElementById(`url-input-${postId}`);
+    const url = urlInput ? urlInput.value.trim() : '';
+
+    try {
+        const resp = await fetch(`/api/linkedin/posts/${postId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                status: 'published',
+                linkedin_url: url || null
+            })
+        });
+
+        if (resp.ok) {
+            showToast('Post published!', 'success');
+            setTimeout(() => location.reload(), 500);
+        } else {
+            showToast('Failed to publish', 'error');
+        }
+    } catch (e) {
+        showToast('Error publishing post', 'error');
+    }
+}
+</script>
+{% endblock %}

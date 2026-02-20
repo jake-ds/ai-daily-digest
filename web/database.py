@@ -1,6 +1,6 @@
 """SQLite database configuration with SQLAlchemy."""
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker, declarative_base
 from contextlib import contextmanager
 
@@ -25,8 +25,36 @@ Base = declarative_base()
 
 def init_db():
     """Initialize database tables."""
-    from web.models import article, collection, linkedin_draft  # noqa: F401
+    from web.models import article, collection, linkedin_draft, reference_post  # noqa: F401
     Base.metadata.create_all(bind=engine)
+    migrate_db()
+
+
+def migrate_db():
+    """Run schema migrations for new columns (ALTER TABLE for SQLite)."""
+    inspector = inspect(engine)
+
+    # LinkedIn drafts 테이블 마이그레이션
+    if "linkedin_drafts" in inspector.get_table_names():
+        existing = {col["name"] for col in inspector.get_columns("linkedin_drafts")}
+        new_columns = {
+            "generation_mode": "VARCHAR(20) DEFAULT 'simple'",
+            "analysis": "TEXT",
+            "direction": "TEXT",
+            "review_notes": "TEXT",
+            "evaluation": "TEXT",
+            "user_feedback": "TEXT",
+            "iteration_count": "INTEGER DEFAULT 1",
+            "status": "VARCHAR(20) DEFAULT 'draft'",
+            "linkedin_url": "TEXT",
+            "published_at": "DATETIME",
+        }
+        with engine.begin() as conn:
+            for col_name, col_type in new_columns.items():
+                if col_name not in existing:
+                    conn.execute(text(
+                        f"ALTER TABLE linkedin_drafts ADD COLUMN {col_name} {col_type}"
+                    ))
 
 
 def get_db():

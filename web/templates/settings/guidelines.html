@@ -46,6 +46,14 @@
     .markdown-content th { background: #f9fafb; font-weight: 600; }
     .markdown-content strong { font-weight: 600; color: #111827; }
     .markdown-content hr { border: none; border-top: 1px solid #e5e7eb; margin: 1.5rem 0; }
+
+    /* Suggestion diff styles */
+    .suggestion-card {
+        transition: all 0.2s;
+    }
+    .suggestion-card:hover {
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
 </style>
 {% endblock %}
 
@@ -53,122 +61,231 @@
 <div class="space-y-6">
     <!-- Header -->
     <div class="flex justify-between items-center">
-        <div>
-            <h1 class="text-2xl font-bold text-gray-900">LinkedIn Guidelines</h1>
-            <p class="text-gray-600 mt-1">LinkedIn 포스팅 지침서를 관리합니다</p>
-        </div>
-        <div class="flex gap-3">
-            <!-- Read mode buttons -->
-            <div id="read-mode-buttons">
-                <button onclick="enterEditMode()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center">
-                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
-                    </svg>
-                    편집
-                </button>
+        <h1 class="text-2xl font-bold text-gray-900">Settings</h1>
+    </div>
+
+    <!-- Tabs -->
+    <div class="border-b border-gray-200">
+        <nav class="-mb-px flex space-x-8">
+            <a href="/settings" class="border-blue-500 text-blue-600 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                LinkedIn Guidelines
+            </a>
+            <a href="/settings/schedule" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                Schedule
+            </a>
+        </nav>
+    </div>
+
+    <!-- Sub-tabs for guidelines page -->
+    <div class="flex gap-2">
+        <button onclick="showTab('guidelines')" id="tab-guidelines"
+                class="px-4 py-2 text-sm font-medium rounded-lg bg-blue-100 text-blue-700">
+            지침서
+        </button>
+        <button onclick="showTab('learning')" id="tab-learning"
+                class="px-4 py-2 text-sm font-medium rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200">
+            레퍼런스 학습
+        </button>
+    </div>
+
+    <!-- Guidelines Tab -->
+    <div id="panel-guidelines">
+        <!-- Sub Header -->
+        <div class="flex justify-between items-center mb-4">
+            <div>
+                <h2 class="text-lg font-semibold text-gray-900">LinkedIn Guidelines</h2>
+                <p class="text-gray-600 mt-1">LinkedIn 포스팅 지침서를 관리합니다</p>
             </div>
-            <!-- Edit mode buttons (hidden by default) -->
-            <div id="edit-mode-buttons" class="hidden flex gap-3">
-                <button onclick="cancelEdit()" class="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
-                    취소
-                </button>
-                <button onclick="restoreBackup()" class="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
-                    백업 복원
-                </button>
-                <button onclick="saveGuidelines()" id="save-btn" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center">
-                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path>
-                    </svg>
-                    저장
-                </button>
+            <div class="flex gap-3">
+                <!-- Read mode buttons -->
+                <div id="read-mode-buttons">
+                    <button onclick="enterEditMode()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                        </svg>
+                        편집
+                    </button>
+                </div>
+                <!-- Edit mode buttons (hidden by default) -->
+                <div id="edit-mode-buttons" class="hidden flex gap-3">
+                    <button onclick="cancelEdit()" class="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
+                        취소
+                    </button>
+                    <button onclick="restoreBackup()" class="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
+                        백업 복원
+                    </button>
+                    <button onclick="saveGuidelines()" id="save-btn" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path>
+                        </svg>
+                        저장
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Content Area -->
+            <div class="lg:col-span-2">
+                <!-- Read Mode -->
+                <div id="read-mode" class="bg-white rounded-lg shadow">
+                    <div class="p-4 border-b">
+                        <h2 class="font-semibold text-gray-900">지침서 내용</h2>
+                    </div>
+                    <div class="p-6 max-h-[600px] overflow-y-auto">
+                        <div id="markdown-content" class="markdown-content"></div>
+                    </div>
+                </div>
+
+                <!-- Edit Mode (hidden by default) -->
+                <div id="edit-mode" class="bg-white rounded-lg shadow hidden">
+                    <div class="p-4 border-b flex justify-between items-center">
+                        <h2 class="font-semibold text-gray-900">지침서 편집</h2>
+                        <span id="save-status" class="text-sm text-gray-500"></span>
+                    </div>
+                    <div class="p-4">
+                        <textarea id="guidelines-editor">{{ content }}</textarea>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Scenarios Reference -->
+            <div class="space-y-4">
+                <div class="bg-white rounded-lg shadow p-4">
+                    <h2 class="font-semibold text-gray-900 mb-4">시나리오 빠른 참조</h2>
+                    <div class="space-y-3">
+                        {% for key, scenario in scenarios.items() %}
+                        <div class="scenario-card p-3 bg-gray-50 rounded-lg">
+                            <div class="flex items-center justify-between">
+                                <span class="font-medium text-gray-900">{{ key }}: {{ scenario.name }}</span>
+                                <button onclick="insertScenario('{{ key }}')" class="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 edit-only hidden">삽입</button>
+                            </div>
+                            <p class="text-sm text-gray-600 mt-1">{{ scenario.description }}</p>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Quick Tips -->
+                <div class="bg-white rounded-lg shadow p-4">
+                    <h2 class="font-semibold text-gray-900 mb-3">작성 팁</h2>
+                    <ul class="space-y-2 text-sm text-gray-600">
+                        <li class="flex items-start">
+                            <span class="text-green-500 mr-2">&#10003;</span>
+                            하십시오체 기본, 해요체로 리듬 전환
+                        </li>
+                        <li class="flex items-start">
+                            <span class="text-green-500 mr-2">&#10003;</span>
+                            1,200~1,800자 권장
+                        </li>
+                        <li class="flex items-start">
+                            <span class="text-green-500 mr-2">&#10003;</span>
+                            숫자와 구체적 사례 활용
+                        </li>
+                        <li class="flex items-start">
+                            <span class="text-red-500 mr-2">&#10007;</span>
+                            이모지, "여러분" 호칭 금지
+                        </li>
+                        <li class="flex items-start">
+                            <span class="text-red-500 mr-2">&#10007;</span>
+                            과장 표현 금지 (혁명, 패러다임 등)
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Keyboard Shortcuts (edit mode only) -->
+                <div id="shortcuts-panel" class="bg-white rounded-lg shadow p-4 hidden">
+                    <h2 class="font-semibold text-gray-900 mb-3">단축키</h2>
+                    <div class="space-y-2 text-sm">
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">저장</span>
+                            <kbd class="px-2 py-1 bg-gray-100 rounded text-xs">Cmd/Ctrl + S</kbd>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">미리보기</span>
+                            <kbd class="px-2 py-1 bg-gray-100 rounded text-xs">Cmd/Ctrl + P</kbd>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">전체화면</span>
+                            <kbd class="px-2 py-1 bg-gray-100 rounded text-xs">F11</kbd>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <!-- Content Area -->
-        <div class="lg:col-span-2">
-            <!-- Read Mode -->
-            <div id="read-mode" class="bg-white rounded-lg shadow">
-                <div class="p-4 border-b">
-                    <h2 class="font-semibold text-gray-900">지침서 내용</h2>
-                </div>
-                <div class="p-6 max-h-[600px] overflow-y-auto">
-                    <div id="markdown-content" class="markdown-content"></div>
-                </div>
-            </div>
+    <!-- Reference Learning Tab (hidden by default) -->
+    <div id="panel-learning" class="hidden">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Input Area -->
+            <div class="lg:col-span-2 space-y-6">
+                <!-- Reference Post Input -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h2 class="text-lg font-semibold text-gray-900 mb-4">레퍼런스 포스팅 입력</h2>
+                    <p class="text-sm text-gray-600 mb-4">좋은 LinkedIn 포스팅을 입력하면 AI가 분석하여 지침서 업데이트를 제안합니다.</p>
 
-            <!-- Edit Mode (hidden by default) -->
-            <div id="edit-mode" class="bg-white rounded-lg shadow hidden">
-                <div class="p-4 border-b flex justify-between items-center">
-                    <h2 class="font-semibold text-gray-900">지침서 편집</h2>
-                    <span id="save-status" class="text-sm text-gray-500"></span>
-                </div>
-                <div class="p-4">
-                    <textarea id="guidelines-editor">{{ content }}</textarea>
-                </div>
-            </div>
-        </div>
-
-        <!-- Scenarios Reference -->
-        <div class="space-y-4">
-            <div class="bg-white rounded-lg shadow p-4">
-                <h2 class="font-semibold text-gray-900 mb-4">시나리오 빠른 참조</h2>
-                <div class="space-y-3">
-                    {% for key, scenario in scenarios.items() %}
-                    <div class="scenario-card p-3 bg-gray-50 rounded-lg">
-                        <div class="flex items-center justify-between">
-                            <span class="font-medium text-gray-900">{{ key }}: {{ scenario.name }}</span>
-                            <button onclick="insertScenario('{{ key }}')" class="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 edit-only hidden">삽입</button>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">포스팅 내용 *</label>
+                            <textarea id="ref-content" rows="8"
+                                      class="w-full border rounded-lg px-3 py-2 text-sm"
+                                      placeholder="LinkedIn 포스팅 전문을 붙여넣으세요..."></textarea>
                         </div>
-                        <p class="text-sm text-gray-600 mt-1">{{ scenario.description }}</p>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">작성자</label>
+                                <input type="text" id="ref-author" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="작성자 이름">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">URL</label>
+                                <input type="text" id="ref-url" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="https://linkedin.com/posts/...">
+                            </div>
+                        </div>
+                        <button onclick="analyzeReference()" id="analyze-btn"
+                                class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition disabled:opacity-50 flex items-center">
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+                            </svg>
+                            분석하기
+                        </button>
                     </div>
-                    {% endfor %}
+                </div>
+
+                <!-- Analysis Results (hidden initially) -->
+                <div id="analysis-results" class="hidden space-y-6">
+                    <!-- Analysis -->
+                    <div class="bg-white rounded-lg shadow p-6">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-4">분석 결과</h3>
+                        <div id="analysis-content" class="text-sm space-y-3"></div>
+                    </div>
+
+                    <!-- Suggestions -->
+                    <div class="bg-white rounded-lg shadow p-6">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-4">지침서 업데이트 제안</h3>
+                        <div id="suggestions-content" class="space-y-3"></div>
+                    </div>
                 </div>
             </div>
 
-            <!-- Quick Tips -->
-            <div class="bg-white rounded-lg shadow p-4">
-                <h2 class="font-semibold text-gray-900 mb-3">작성 팁</h2>
-                <ul class="space-y-2 text-sm text-gray-600">
-                    <li class="flex items-start">
-                        <span class="text-green-500 mr-2">✓</span>
-                        하십시오체 기본, 해요체로 리듬 전환
-                    </li>
-                    <li class="flex items-start">
-                        <span class="text-green-500 mr-2">✓</span>
-                        1,200~1,800자 권장
-                    </li>
-                    <li class="flex items-start">
-                        <span class="text-green-500 mr-2">✓</span>
-                        숫자와 구체적 사례 활용
-                    </li>
-                    <li class="flex items-start">
-                        <span class="text-red-500 mr-2">✗</span>
-                        이모지, "여러분" 호칭 금지
-                    </li>
-                    <li class="flex items-start">
-                        <span class="text-red-500 mr-2">✗</span>
-                        과장 표현 금지 (혁명, 패러다임 등)
-                    </li>
-                </ul>
-            </div>
-
-            <!-- Keyboard Shortcuts (edit mode only) -->
-            <div id="shortcuts-panel" class="bg-white rounded-lg shadow p-4 hidden">
-                <h2 class="font-semibold text-gray-900 mb-3">단축키</h2>
-                <div class="space-y-2 text-sm">
-                    <div class="flex justify-between">
-                        <span class="text-gray-600">저장</span>
-                        <kbd class="px-2 py-1 bg-gray-100 rounded text-xs">Cmd/Ctrl + S</kbd>
-                    </div>
-                    <div class="flex justify-between">
-                        <span class="text-gray-600">미리보기</span>
-                        <kbd class="px-2 py-1 bg-gray-100 rounded text-xs">Cmd/Ctrl + P</kbd>
-                    </div>
-                    <div class="flex justify-between">
-                        <span class="text-gray-600">전체화면</span>
-                        <kbd class="px-2 py-1 bg-gray-100 rounded text-xs">F11</kbd>
+            <!-- Reference Posts List -->
+            <div class="space-y-4">
+                <div class="bg-white rounded-lg shadow p-4">
+                    <h2 class="font-semibold text-gray-900 mb-4">등록된 레퍼런스</h2>
+                    <div id="reference-list" class="space-y-3">
+                        {% if reference_posts %}
+                        {% for ref in reference_posts %}
+                        <div class="p-3 bg-gray-50 rounded-lg" id="ref-item-{{ ref.id }}">
+                            <p class="text-sm text-gray-700 line-clamp-3">{{ ref.content[:150] }}...</p>
+                            <div class="flex items-center justify-between mt-2 text-xs text-gray-500">
+                                <span>{{ ref.author or '작성자 미상' }} | {{ ref.created_at.strftime('%m/%d') if ref.created_at else '' }}</span>
+                                <button onclick="deleteReference({{ ref.id }})" class="text-red-500 hover:text-red-700">삭제</button>
+                            </div>
+                        </div>
+                        {% endfor %}
+                        {% else %}
+                        <p class="text-sm text-gray-500" id="no-refs-message">등록된 레퍼런스가 없습니다.</p>
+                        {% endif %}
                     </div>
                 </div>
             </div>
@@ -188,6 +305,19 @@ let simplemde = null;
 let isEditMode = false;
 let hasChanges = false;
 
+// Tab switching
+function showTab(tab) {
+    document.getElementById('panel-guidelines').classList.toggle('hidden', tab !== 'guidelines');
+    document.getElementById('panel-learning').classList.toggle('hidden', tab !== 'learning');
+
+    document.getElementById('tab-guidelines').className = tab === 'guidelines'
+        ? 'px-4 py-2 text-sm font-medium rounded-lg bg-blue-100 text-blue-700'
+        : 'px-4 py-2 text-sm font-medium rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200';
+    document.getElementById('tab-learning').className = tab === 'learning'
+        ? 'px-4 py-2 text-sm font-medium rounded-lg bg-purple-100 text-purple-700'
+        : 'px-4 py-2 text-sm font-medium rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200';
+}
+
 // Render markdown on page load
 document.addEventListener('DOMContentLoaded', function() {
     renderMarkdown(originalContent);
@@ -201,7 +331,6 @@ function renderMarkdown(content) {
 function enterEditMode() {
     isEditMode = true;
 
-    // Show/hide elements
     document.getElementById('read-mode').classList.add('hidden');
     document.getElementById('edit-mode').classList.remove('hidden');
     document.getElementById('read-mode-buttons').classList.add('hidden');
@@ -209,7 +338,6 @@ function enterEditMode() {
     document.getElementById('shortcuts-panel').classList.remove('hidden');
     document.querySelectorAll('.edit-only').forEach(el => el.classList.remove('hidden'));
 
-    // Load SimpleMDE if not already loaded
     if (!simplemde) {
         const script = document.createElement('script');
         script.src = 'https://cdn.jsdelivr.net/simplemde/latest/simplemde.min.js';
@@ -240,7 +368,6 @@ function initializeEditor() {
         initialValue: originalContent,
     });
 
-    // Track changes
     simplemde.codemirror.on("change", function() {
         hasChanges = true;
         document.getElementById("save-status").textContent = "변경사항 있음";
@@ -248,12 +375,10 @@ function initializeEditor() {
     });
 }
 
-// Cancel edit and return to read mode
 function cancelEdit() {
     if (hasChanges && !confirm("변경사항이 있습니다. 취소하시겠습니까?")) {
         return;
     }
-
     exitEditMode();
 }
 
@@ -261,7 +386,6 @@ function exitEditMode() {
     isEditMode = false;
     hasChanges = false;
 
-    // Show/hide elements
     document.getElementById('read-mode').classList.remove('hidden');
     document.getElementById('edit-mode').classList.add('hidden');
     document.getElementById('read-mode-buttons').classList.remove('hidden');
@@ -270,7 +394,6 @@ function exitEditMode() {
     document.querySelectorAll('.edit-only').forEach(el => el.classList.add('hidden'));
 }
 
-// Save guidelines
 async function saveGuidelines() {
     if (!simplemde) return;
 
@@ -293,11 +416,7 @@ async function saveGuidelines() {
             status.textContent = "저장됨 " + new Date().toLocaleTimeString();
             status.className = "text-sm text-green-600";
             showToast("지침서가 저장되었습니다", "success");
-
-            // Update the read view
             renderMarkdown(newContent);
-
-            // Return to read mode after save
             setTimeout(() => exitEditMode(), 500);
         } else {
             throw new Error("Save failed");
@@ -312,20 +431,15 @@ async function saveGuidelines() {
     btn.innerHTML = '<svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg> 저장';
 }
 
-// Restore from backup
 async function restoreBackup() {
     if (!confirm("백업에서 복원하시겠습니까? 현재 편집 내용이 사라집니다.")) return;
 
     try {
-        const response = await fetch("/api/settings/linkedin-guidelines/restore", {
-            method: "POST"
-        });
+        const response = await fetch("/api/settings/linkedin-guidelines/restore", { method: "POST" });
 
         if (response.ok) {
             const data = await response.json();
-            if (simplemde) {
-                simplemde.value(data.content);
-            }
+            if (simplemde) simplemde.value(data.content);
             showToast("백업에서 복원되었습니다", "success");
         } else {
             const err = await response.json();
@@ -336,41 +450,15 @@ async function restoreBackup() {
     }
 }
 
-// Insert scenario template
 function insertScenario(scenario) {
     if (!simplemde) return;
 
     const templates = {
-        'A': `### 시나리오 A: 산업 분석 + 프레임워크
-
-**훅 스타일**: 충격적 숫자 + 방향성
-**본문 구조**: 현상 나열 → 프레임워크 추출 → 시사점 확장
-**마무리**: 본인 경험 연결 또는 선언
-`,
-        'B': `### 시나리오 B: 제품/도구 리뷰 + 실사용
-
-**훅 스타일**: 출시 팩트 + 임팩트
-**본문 구조**: 제품 설명 → 직접 사용 경험 → 왜 중요한지
-**마무리**: 가벼운 행동 선언
-`,
-        'C': `### 시나리오 C: 개인 실천 + 회고
-
-**훅 스타일**: 의외성 또는 행동 선언
-**본문 구조**: 맥락 → 행동 상세 → 인사이트 추출
-**마무리**: 자기 고백 또는 결심
-`,
-        'D': `### 시나리오 D: 시장 시그널 읽기
-
-**훅 스타일**: 메타 관찰 또는 시간축 대비
-**본문 구조**: 시간축 나열 → 패턴 추출 → 시그널 분석
-**마무리**: 변하지 않는 원칙
-`,
-        'E': `### 시나리오 E: 전략적 의사결정 공유
-
-**훅 스타일**: 결정 선언 + 역설
-**본문 구조**: 기존 포지션 → 변화 시그널 → 의사결정 논리
-**마무리**: 최종 결정 + 원칙
-`
+        'A': `### 시나리오 A: 산업 분석 + 프레임워크\n\n**훅 스타일**: 충격적 숫자 + 방향성\n**본문 구조**: 현상 나열 → 프레임워크 추출 → 시사점 확장\n**마무리**: 본인 경험 연결 또는 선언\n`,
+        'B': `### 시나리오 B: 제품/도구 리뷰 + 실사용\n\n**훅 스타일**: 출시 팩트 + 임팩트\n**본문 구조**: 제품 설명 → 직접 사용 경험 → 왜 중요한지\n**마무리**: 가벼운 행동 선언\n`,
+        'C': `### 시나리오 C: 개인 실천 + 회고\n\n**훅 스타일**: 의외성 또는 행동 선언\n**본문 구조**: 맥락 → 행동 상세 → 인사이트 추출\n**마무리**: 자기 고백 또는 결심\n`,
+        'D': `### 시나리오 D: 시장 시그널 읽기\n\n**훅 스타일**: 메타 관찰 또는 시간축 대비\n**본문 구조**: 시간축 나열 → 패턴 추출 → 시그널 분석\n**마무리**: 변하지 않는 원칙\n`,
+        'E': `### 시나리오 E: 전략적 의사결정 공유\n\n**훅 스타일**: 결정 선언 + 역설\n**본문 구조**: 기존 포지션 → 변화 시그널 → 의사결정 논리\n**마무리**: 최종 결정 + 원칙\n`
     };
 
     const template = templates[scenario];
@@ -379,6 +467,232 @@ function insertScenario(scenario) {
         const cursor = cm.getCursor();
         cm.replaceRange(template, cursor);
         showToast(`시나리오 ${scenario} 템플릿 삽입됨`, "info");
+    }
+}
+
+// --- Reference Learning ---
+
+async function analyzeReference() {
+    const content = document.getElementById('ref-content').value.trim();
+    if (!content) {
+        showToast('포스팅 내용을 입력해주세요', 'warning');
+        return;
+    }
+
+    const btn = document.getElementById('analyze-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<svg class="animate-spin h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> 분석 중...';
+
+    try {
+        const response = await fetch('/api/settings/reference-posts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                content: content,
+                author: document.getElementById('ref-author').value.trim() || null,
+                source_url: document.getElementById('ref-url').value.trim() || null,
+            })
+        });
+
+        if (!response.ok) throw new Error('Analysis failed');
+
+        const data = await response.json();
+        showAnalysisResults(data.analysis, data.suggestions);
+        addReferenceToList(data.post);
+
+        showToast('분석이 완료되었습니다', 'success');
+
+        // Clear inputs
+        document.getElementById('ref-content').value = '';
+        document.getElementById('ref-author').value = '';
+        document.getElementById('ref-url').value = '';
+
+    } catch (e) {
+        showToast('분석에 실패했습니다: ' + e.message, 'error');
+    }
+
+    btn.disabled = false;
+    btn.innerHTML = '<svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path></svg> 분석하기';
+}
+
+function showAnalysisResults(analysis, suggestions) {
+    const container = document.getElementById('analysis-results');
+    container.classList.remove('hidden');
+
+    // Render analysis
+    const analysisEl = document.getElementById('analysis-content');
+    if (analysis.error) {
+        analysisEl.innerHTML = `<p class="text-red-500">${analysis.error}</p>`;
+    } else {
+        let html = '';
+
+        if (analysis.hook) {
+            html += `<div class="p-3 bg-blue-50 rounded">
+                <span class="font-medium text-blue-900">훅</span>: ${analysis.hook.type || ''}
+                <p class="text-blue-700 mt-1">"${analysis.hook.text || ''}"</p>
+                <p class="text-xs text-blue-600 mt-1">${analysis.hook.effectiveness || ''}</p>
+            </div>`;
+        }
+
+        if (analysis.structure) {
+            html += `<div class="p-3 bg-green-50 rounded">
+                <span class="font-medium text-green-900">구조</span>: ${analysis.structure.pattern || ''}
+                <p class="text-xs text-green-600 mt-1">${analysis.structure.flow || ''}</p>
+            </div>`;
+        }
+
+        if (analysis.tone) {
+            html += `<div class="p-3 bg-purple-50 rounded">
+                <span class="font-medium text-purple-900">톤</span>: ${analysis.tone.formality || ''}
+                | 페르소나: ${analysis.tone.persona || ''}
+            </div>`;
+        }
+
+        if (analysis.strengths) {
+            html += `<div class="p-3 bg-yellow-50 rounded">
+                <span class="font-medium text-yellow-900">강점</span>
+                <ul class="list-disc pl-4 mt-1 text-sm text-yellow-700">
+                    ${analysis.strengths.map(s => `<li>${s}</li>`).join('')}
+                </ul>
+            </div>`;
+        }
+
+        if (analysis.patterns_to_learn) {
+            html += `<div class="p-3 bg-orange-50 rounded">
+                <span class="font-medium text-orange-900">학습할 패턴</span>
+                <ul class="list-disc pl-4 mt-1 text-sm text-orange-700">
+                    ${analysis.patterns_to_learn.map(p => `<li>${p}</li>`).join('')}
+                </ul>
+            </div>`;
+        }
+
+        if (analysis.overall_assessment) {
+            html += `<div class="p-3 bg-gray-50 rounded">
+                <span class="font-medium">전체 평가</span>: ${analysis.overall_assessment}
+            </div>`;
+        }
+
+        analysisEl.innerHTML = html;
+    }
+
+    // Render suggestions
+    const suggestionsEl = document.getElementById('suggestions-content');
+    if (suggestions.error) {
+        suggestionsEl.innerHTML = `<p class="text-red-500">${suggestions.error}</p>`;
+    } else if (suggestions.suggestions && suggestions.suggestions.length > 0) {
+        let html = '';
+        if (suggestions.summary) {
+            html += `<p class="text-sm text-gray-600 mb-3">${suggestions.summary}</p>`;
+        }
+
+        suggestions.suggestions.forEach((s, i) => {
+            html += `<div class="suggestion-card p-4 border rounded-lg" id="suggestion-${i}">
+                <div class="flex items-start justify-between">
+                    <div class="flex-1">
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="px-2 py-0.5 text-xs font-medium rounded ${s.type === 'add' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}">
+                                ${s.type === 'add' ? '추가' : '수정'}
+                            </span>
+                            <span class="text-sm font-medium text-gray-900">${s.section || ''}</span>
+                        </div>
+                        <p class="text-sm text-gray-700 mt-1">${s.content || ''}</p>
+                        <p class="text-xs text-gray-500 mt-1">${s.reason || ''}</p>
+                    </div>
+                    <div class="flex gap-1 ml-3">
+                        <button onclick="applySuggestion(${i})"
+                                class="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700"
+                                id="apply-btn-${i}">수락</button>
+                        <button onclick="dismissSuggestion(${i})"
+                                class="px-3 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300">거절</button>
+                    </div>
+                </div>
+            </div>`;
+        });
+
+        suggestionsEl.innerHTML = html;
+
+        // Store suggestions for later use
+        window._currentSuggestions = suggestions.suggestions;
+    } else {
+        suggestionsEl.innerHTML = '<p class="text-sm text-gray-500">현재 지침서와 크게 다른 점이 없습니다.</p>';
+    }
+}
+
+async function applySuggestion(index) {
+    const suggestion = window._currentSuggestions?.[index];
+    if (!suggestion) return;
+
+    const btn = document.getElementById(`apply-btn-${index}`);
+    btn.disabled = true;
+    btn.textContent = '적용 중...';
+
+    try {
+        const response = await fetch('/api/settings/guidelines/apply-suggestion', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ suggestion: suggestion })
+        });
+
+        if (!response.ok) throw new Error('Apply failed');
+
+        const data = await response.json();
+
+        // Update the guidelines view
+        renderMarkdown(data.content);
+
+        // Mark suggestion as applied
+        const card = document.getElementById(`suggestion-${index}`);
+        card.classList.add('opacity-50');
+        btn.textContent = '적용됨';
+        btn.className = 'px-3 py-1 text-xs bg-gray-300 text-gray-500 rounded cursor-not-allowed';
+
+        showToast('지침서가 업데이트되었습니다', 'success');
+    } catch (e) {
+        btn.disabled = false;
+        btn.textContent = '수락';
+        showToast('적용에 실패했습니다', 'error');
+    }
+}
+
+function dismissSuggestion(index) {
+    const card = document.getElementById(`suggestion-${index}`);
+    if (card) {
+        card.classList.add('opacity-30');
+        card.innerHTML += '<p class="text-xs text-gray-400 mt-2">거절됨</p>';
+    }
+}
+
+function addReferenceToList(post) {
+    const list = document.getElementById('reference-list');
+    const noMsg = document.getElementById('no-refs-message');
+    if (noMsg) noMsg.remove();
+
+    const el = document.createElement('div');
+    el.className = 'p-3 bg-gray-50 rounded-lg';
+    el.id = `ref-item-${post.id}`;
+    el.innerHTML = `
+        <p class="text-sm text-gray-700 line-clamp-3">${post.content.substring(0, 150)}...</p>
+        <div class="flex items-center justify-between mt-2 text-xs text-gray-500">
+            <span>${post.author || '작성자 미상'} | ${new Date().toLocaleDateString('ko-KR', {month: '2-digit', day: '2-digit'})}</span>
+            <button onclick="deleteReference(${post.id})" class="text-red-500 hover:text-red-700">삭제</button>
+        </div>
+    `;
+    list.prepend(el);
+}
+
+async function deleteReference(id) {
+    if (!confirm('이 레퍼런스를 삭제하시겠습니까?')) return;
+
+    try {
+        const resp = await fetch(`/api/settings/reference-posts/${id}`, { method: 'DELETE' });
+        if (resp.ok) {
+            document.getElementById(`ref-item-${id}`)?.remove();
+            showToast('삭제되었습니다', 'success');
+        } else {
+            showToast('삭제 실패', 'error');
+        }
+    } catch (e) {
+        showToast('삭제 실패', 'error');
     }
 }
 

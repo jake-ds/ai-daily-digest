@@ -2,6 +2,53 @@
 
 {% block title %}{{ article.title }} - AI Daily Digest{% endblock %}
 
+{% block head %}
+<style>
+    /* Agent timeline styles */
+    .agent-step {
+        border-left: 3px solid #e5e7eb;
+        transition: border-color 0.3s;
+    }
+    .agent-step.active { border-color: #3b82f6; }
+    .agent-step.completed { border-color: #22c55e; }
+    .agent-step.waiting { border-color: #f59e0b; }
+    .agent-step.error { border-color: #ef4444; }
+
+    .step-indicator {
+        width: 28px; height: 28px;
+        border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 12px; font-weight: 600;
+        position: relative; left: -16px;
+        flex-shrink: 0;
+    }
+    .step-indicator.pending { background: #f3f4f6; color: #9ca3af; }
+    .step-indicator.active { background: #3b82f6; color: white; }
+    .step-indicator.completed { background: #22c55e; color: white; }
+    .step-indicator.waiting { background: #f59e0b; color: white; }
+    .step-indicator.error { background: #ef4444; color: white; }
+
+    .step-content {
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.3s ease;
+    }
+    .step-content.expanded {
+        max-height: 5000px;
+    }
+
+    @keyframes pulse-dot {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.3; }
+    }
+    .pulse-dot { animation: pulse-dot 1.5s infinite; }
+
+    /* Evaluation table styles */
+    .eval-pass { color: #16a34a; }
+    .eval-fail { color: #dc2626; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="space-y-6">
     <!-- Back link -->
@@ -28,9 +75,22 @@
                 </span>
                 {% endif %}
             </div>
-            <span class="text-sm text-gray-500">
-                {{ article.collected_at.strftime('%Y-%m-%d %H:%M') if article.collected_at else '' }}
-            </span>
+            <div class="flex items-center gap-3">
+                <!-- Favorite Button -->
+                <button id="favorite-btn"
+                        onclick="toggleFavorite()"
+                        class="text-2xl hover:scale-110 transition"
+                        data-favorite="{{ 'true' if article.is_favorite else 'false' }}">
+                    {% if article.is_favorite %}
+                    <span class="text-yellow-500">&#9733;</span>
+                    {% else %}
+                    <span class="text-gray-300 hover:text-yellow-400">&#9734;</span>
+                    {% endif %}
+                </button>
+                <span class="text-sm text-gray-500">
+                    {{ article.collected_at.strftime('%Y-%m-%d %H:%M') if article.collected_at else '' }}
+                </span>
+            </div>
         </div>
 
         <h1 class="text-2xl font-bold text-gray-900 mb-4">{{ article.title }}</h1>
@@ -80,7 +140,7 @@
         <!-- Recommended Scenario -->
         <div class="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
             <div class="flex items-start">
-                <span class="text-2xl mr-3">💡</span>
+                <span class="text-2xl mr-3">&#x1F4A1;</span>
                 <div class="flex-1">
                     <div class="font-medium text-blue-900">추천 시나리오: {{ recommended_scenario }}</div>
                     <div class="text-sm text-blue-700 mt-1">{{ scenarios[recommended_scenario].name }}</div>
@@ -118,28 +178,65 @@
             </p>
         </div>
 
-        <!-- Generate Button -->
-        <button
-            id="generate-btn"
-            hx-post="/api/linkedin/generate/{{ article.id }}"
-            hx-include="#scenario-select"
-            hx-vals='js:{"scenario": document.getElementById("scenario-select").value}'
-            hx-target="#drafts-container"
-            hx-swap="afterbegin"
-            hx-indicator="#generate-spinner"
-            class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
-        >
-            <span id="generate-spinner" class="htmx-indicator">
-                <svg class="animate-spin -ml-1 mr-2 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        <!-- Generation Buttons -->
+        <div class="flex gap-3 mb-6">
+            <!-- Simple Generate -->
+            <button
+                id="generate-btn"
+                hx-post="/api/linkedin/generate/{{ article.id }}"
+                hx-include="#scenario-select"
+                hx-vals='js:{"scenario": document.getElementById("scenario-select").value}'
+                hx-target="#drafts-container"
+                hx-swap="afterbegin"
+                hx-indicator="#generate-spinner"
+                class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
+            >
+                <span id="generate-spinner" class="htmx-indicator">
+                    <svg class="animate-spin -ml-1 mr-2 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                </span>
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
                 </svg>
-            </span>
-            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
-            </svg>
-            Generate Draft
-        </button>
+                Generate Draft
+            </button>
+
+            <!-- Agent Mode -->
+            <button
+                id="agent-btn"
+                onclick="startAgentMode()"
+                class="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition disabled:opacity-50"
+            >
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+                </svg>
+                Agent Mode
+            </button>
+        </div>
+
+        <!-- Agent Workspace (hidden by default) -->
+        <div id="agent-workspace" class="hidden mb-6">
+            <div class="border rounded-lg overflow-hidden">
+                <div class="bg-purple-50 px-4 py-3 border-b flex items-center justify-between">
+                    <div class="flex items-center">
+                        <span class="text-purple-700 font-semibold">Agent Mode</span>
+                        <span id="agent-status-badge" class="ml-2 px-2 py-0.5 text-xs rounded-full bg-purple-100 text-purple-700">대기 중</span>
+                    </div>
+                    <button onclick="closeAgentWorkspace()" class="text-gray-500 hover:text-gray-700">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Steps Timeline -->
+                <div id="agent-steps" class="p-4 space-y-1">
+                    <!-- Steps will be dynamically populated -->
+                </div>
+            </div>
+        </div>
 
         <!-- Drafts Container -->
         <div id="drafts-container" class="mt-6 space-y-4">
@@ -151,12 +248,26 @@
                             Scenario {{ draft.scenario }}: {{ scenarios[draft.scenario].name }}
                         </span>
                         <span class="text-xs text-gray-500">Version {{ draft.version }}</span>
+                        {% if draft.generation_mode == 'agent' %}
+                        <span class="px-2 py-1 text-xs font-medium bg-purple-50 text-purple-600 rounded">Agent</span>
+                        {% endif %}
+                        {% if draft.status == 'final' %}
+                        <span class="px-2 py-1 text-xs font-medium bg-green-100 text-green-700 rounded">Final</span>
+                        {% elif draft.status == 'published' %}
+                        <span class="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded">Published</span>
+                        {% endif %}
                     </div>
                     <div class="flex items-center space-x-2">
                         <button onclick="copyToClipboard(document.getElementById('draft-{{ draft.id }}').innerText)"
                                 class="px-3 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300">
                             Copy
                         </button>
+                        {% if draft.status == 'draft' %}
+                        <button onclick="finalizeDraft({{ draft.id }})"
+                                class="px-3 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200">
+                            Finalize
+                        </button>
+                        {% endif %}
                         <button
                             hx-post="/api/linkedin/regenerate/{{ draft.id }}"
                             hx-target="#drafts-container"
@@ -168,8 +279,21 @@
                     </div>
                 </div>
                 <div id="draft-{{ draft.id }}" class="prose prose-sm max-w-none whitespace-pre-wrap text-gray-800">{{ draft.draft_content }}</div>
+
+                {% if draft.evaluation %}
+                <div class="mt-3 pt-3 border-t">
+                    <button onclick="toggleEvaluation({{ draft.id }})" class="text-sm text-purple-600 hover:text-purple-800">
+                        가이드라인 평가 보기
+                    </button>
+                    <div id="eval-{{ draft.id }}" class="hidden mt-2"></div>
+                </div>
+                {% endif %}
+
                 <div class="mt-2 text-xs text-gray-400">
                     Created: {{ draft.created_at.strftime('%Y-%m-%d %H:%M') if draft.created_at else '' }}
+                    {% if draft.generation_mode == 'agent' %}
+                    | Iterations: {{ draft.iteration_count or 1 }}
+                    {% endif %}
                 </div>
             </div>
             {% else %}
@@ -185,20 +309,54 @@
 
 {% block scripts %}
 <script>
+const articleId = {{ article.id }};
 const scenarioSelect = document.getElementById('scenario-select');
 const scenarioDescription = document.getElementById('scenario-description');
 const scenarios = {{ scenarios | tojson | safe }};
 const recommendedScenario = "{{ recommended_scenario }}";
 
+// Evaluation data from existing drafts
+const draftEvaluations = {};
+{% for draft in drafts %}
+{% if draft.evaluation %}
+try { draftEvaluations[{{ draft.id }}] = JSON.parse({{ draft.evaluation | tojson }}); } catch(e) {}
+{% endif %}
+{% endfor %}
+
+// Agent state
+let agentSessionId = null;
+let eventSource = null;
+
+// Mark as read on page load
+document.addEventListener('DOMContentLoaded', function() {
+    fetch(`/api/articles/${articleId}/read`, { method: 'POST' });
+});
+
+// Toggle favorite
+async function toggleFavorite() {
+    const btn = document.getElementById('favorite-btn');
+    try {
+        const response = await fetch(`/api/articles/${articleId}/favorite`, { method: 'POST' });
+        const data = await response.json();
+
+        if (data.is_favorite) {
+            btn.innerHTML = '<span class="text-yellow-500">&#9733;</span>';
+            btn.dataset.favorite = 'true';
+        } else {
+            btn.innerHTML = '<span class="text-gray-300 hover:text-yellow-400">&#9734;</span>';
+            btn.dataset.favorite = 'false';
+        }
+        showToast(data.is_favorite ? 'Added to favorites' : 'Removed from favorites');
+    } catch (e) {
+        showToast('Failed to update favorite', 'error');
+    }
+}
+
 // Select scenario function
 function selectScenario(key) {
-    // Update hidden input
     scenarioSelect.value = key;
-
-    // Update description
     scenarioDescription.textContent = scenarios[key].description;
 
-    // Update button styles
     document.querySelectorAll('[id^="scenario-btn-"]').forEach(btn => {
         const btnKey = btn.id.replace('scenario-btn-', '');
         if (btnKey === key) {
@@ -211,12 +369,434 @@ function selectScenario(key) {
     });
 }
 
+// --- Agent Mode ---
+
+function startAgentMode() {
+    const workspace = document.getElementById('agent-workspace');
+    workspace.classList.remove('hidden');
+    document.getElementById('agent-btn').disabled = true;
+    document.getElementById('generate-btn').disabled = true;
+
+    const scenario = scenarioSelect.value;
+    const stepsContainer = document.getElementById('agent-steps');
+    stepsContainer.innerHTML = '';
+
+    updateAgentStatus('연결 중...', 'bg-yellow-100 text-yellow-700');
+
+    // Start SSE connection
+    fetch(`/api/linkedin/agent/start/${articleId}?scenario=${scenario}`, {
+        method: 'POST',
+    }).then(response => {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        function readStream() {
+            reader.read().then(({ done, value }) => {
+                if (done) {
+                    handleAgentDone();
+                    return;
+                }
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop();
+
+                let currentEvent = '';
+                let currentData = '';
+
+                for (const line of lines) {
+                    if (line.startsWith('event: ')) {
+                        currentEvent = line.substring(7).trim();
+                    } else if (line.startsWith('data: ')) {
+                        currentData = line.substring(6);
+                        if (currentEvent && currentData) {
+                            try {
+                                handleAgentEvent(currentEvent, JSON.parse(currentData));
+                            } catch (e) {
+                                console.error('Parse error:', e, currentData);
+                            }
+                            currentEvent = '';
+                            currentData = '';
+                        }
+                    }
+                }
+
+                readStream();
+            }).catch(err => {
+                console.error('Stream error:', err);
+                updateAgentStatus('오류 발생', 'bg-red-100 text-red-700');
+            });
+        }
+
+        readStream();
+    }).catch(err => {
+        console.error('Agent start error:', err);
+        updateAgentStatus('시작 실패', 'bg-red-100 text-red-700');
+        document.getElementById('agent-btn').disabled = false;
+        document.getElementById('generate-btn').disabled = false;
+    });
+}
+
+function handleAgentEvent(event, data) {
+    switch (event) {
+        case 'session_created':
+            agentSessionId = data.session_id;
+            initStepTimeline(data.steps);
+            updateAgentStatus('진행 중', 'bg-blue-100 text-blue-700');
+            break;
+
+        case 'step_start':
+            activateStep(data.step, data.name);
+            break;
+
+        case 'step_content':
+            appendStepContent(data.step, JSON.stringify(data, null, 2));
+            break;
+
+        case 'step_complete':
+            completeStep(data.step, data.content);
+            break;
+
+        case 'waiting_for_input':
+            handleWaitingForInput(data);
+            break;
+
+        case 'input_received':
+            resumeFromInput(data.step);
+            break;
+
+        case 'input_timeout':
+            resumeFromInput(data.step);
+            break;
+
+        case 'agent_complete':
+            handleAgentComplete(data);
+            break;
+
+        case 'agent_error':
+            handleAgentError(data);
+            break;
+    }
+}
+
+function initStepTimeline(steps) {
+    const container = document.getElementById('agent-steps');
+    container.innerHTML = '';
+
+    steps.forEach(step => {
+        const stepEl = document.createElement('div');
+        stepEl.id = `agent-step-${step.id}`;
+        stepEl.className = 'agent-step pl-6 pb-4 relative';
+        stepEl.innerHTML = `
+            <div class="flex items-start">
+                <div class="step-indicator pending" id="step-ind-${step.id}">${step.id + 1}</div>
+                <div class="flex-1 ml-2">
+                    <div class="flex items-center">
+                        <span class="font-medium text-gray-700" id="step-title-${step.id}">${step.name}</span>
+                        <span class="ml-2 text-xs text-gray-400">${step.description}</span>
+                    </div>
+                    <div class="step-content" id="step-content-${step.id}">
+                        <div class="mt-2 text-sm text-gray-600 whitespace-pre-wrap" id="step-text-${step.id}"></div>
+                        <div id="step-input-${step.id}"></div>
+                    </div>
+                </div>
+            </div>
+        `;
+        container.appendChild(stepEl);
+    });
+}
+
+function activateStep(stepId, name) {
+    const stepEl = document.getElementById(`agent-step-${stepId}`);
+    const indicator = document.getElementById(`step-ind-${stepId}`);
+    const content = document.getElementById(`step-content-${stepId}`);
+
+    if (stepEl) stepEl.classList.add('active');
+    if (indicator) {
+        indicator.classList.remove('pending');
+        indicator.classList.add('active');
+        indicator.innerHTML = '<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>';
+    }
+    if (content) content.classList.add('expanded');
+
+    // Scroll to step
+    stepEl?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function completeStep(stepId, content) {
+    const stepEl = document.getElementById(`agent-step-${stepId}`);
+    const indicator = document.getElementById(`step-ind-${stepId}`);
+    const textEl = document.getElementById(`step-text-${stepId}`);
+
+    if (stepEl) {
+        stepEl.classList.remove('active', 'waiting');
+        stepEl.classList.add('completed');
+    }
+    if (indicator) {
+        indicator.classList.remove('active', 'waiting');
+        indicator.classList.add('completed');
+        indicator.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>';
+    }
+
+    // For step 5 (evaluation), render as table
+    if (stepId === 5) {
+        try {
+            const evalData = JSON.parse(content);
+            textEl.innerHTML = renderEvaluationTable(evalData);
+        } catch {
+            textEl.textContent = content;
+        }
+    } else {
+        textEl.textContent = content;
+    }
+
+    // Make collapsible
+    const contentEl = document.getElementById(`step-content-${stepId}`);
+    const titleEl = document.getElementById(`step-title-${stepId}`);
+    if (titleEl && contentEl) {
+        titleEl.style.cursor = 'pointer';
+        titleEl.onclick = () => contentEl.classList.toggle('expanded');
+    }
+}
+
+function handleWaitingForInput(data) {
+    const stepEl = document.getElementById(`agent-step-${data.step}`);
+    const indicator = document.getElementById(`step-ind-${data.step}`);
+    const inputEl = document.getElementById(`step-input-${data.step}`);
+
+    if (stepEl) {
+        stepEl.classList.remove('active');
+        stepEl.classList.add('waiting');
+    }
+    if (indicator) {
+        indicator.classList.remove('active');
+        indicator.classList.add('waiting');
+        indicator.innerHTML = '?';
+    }
+
+    updateAgentStatus('입력 대기', 'bg-yellow-100 text-yellow-700');
+
+    if (data.type === 'direction_select') {
+        inputEl.innerHTML = `
+            <div class="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <p class="text-sm font-medium text-yellow-800 mb-2">${data.prompt}</p>
+                <div class="space-y-2">
+                    <label class="flex items-center"><input type="radio" name="direction" value="1" checked class="mr-2"> 방향 1</label>
+                    <label class="flex items-center"><input type="radio" name="direction" value="2" class="mr-2"> 방향 2</label>
+                    <label class="flex items-center"><input type="radio" name="direction" value="3" class="mr-2"> 방향 3</label>
+                    <div class="mt-2">
+                        <label class="flex items-center"><input type="radio" name="direction" value="custom" class="mr-2"> 직접 입력:</label>
+                        <textarea id="custom-direction" rows="2" class="mt-1 w-full text-sm border rounded p-2" placeholder="원하는 방향을 직접 입력하세요..."></textarea>
+                    </div>
+                </div>
+                <button onclick="submitDirection()" class="mt-2 px-4 py-1.5 bg-yellow-600 text-white text-sm rounded hover:bg-yellow-700">선택 완료</button>
+            </div>
+        `;
+    } else if (data.type === 'draft_feedback') {
+        inputEl.innerHTML = `
+            <div class="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <p class="text-sm font-medium text-yellow-800 mb-2">${data.prompt}</p>
+                <textarea id="draft-feedback" rows="3" class="w-full text-sm border rounded p-2" placeholder="피드백을 입력하세요... (없으면 비워두세요)"></textarea>
+                <div class="flex gap-2 mt-2">
+                    <button onclick="submitFeedback()" class="px-4 py-1.5 bg-yellow-600 text-white text-sm rounded hover:bg-yellow-700">피드백 전송</button>
+                    <button onclick="skipFeedback()" class="px-4 py-1.5 bg-gray-200 text-gray-700 text-sm rounded hover:bg-gray-300">건너뛰기</button>
+                </div>
+            </div>
+        `;
+    }
+}
+
+async function submitDirection() {
+    if (!agentSessionId) return;
+
+    const selected = document.querySelector('input[name="direction"]:checked');
+    let direction = selected ? selected.value : '1';
+
+    if (direction === 'custom') {
+        const customText = document.getElementById('custom-direction').value;
+        direction = customText || '1';
+    }
+
+    await fetch(`/api/linkedin/agent/${agentSessionId}/input`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ direction: direction })
+    });
+}
+
+async function submitFeedback() {
+    if (!agentSessionId) return;
+
+    const feedback = document.getElementById('draft-feedback').value;
+    await fetch(`/api/linkedin/agent/${agentSessionId}/input`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ feedback: feedback })
+    });
+}
+
+async function skipFeedback() {
+    if (!agentSessionId) return;
+
+    await fetch(`/api/linkedin/agent/${agentSessionId}/input`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ feedback: '' })
+    });
+}
+
+function resumeFromInput(stepId) {
+    const inputEl = document.getElementById(`step-input-${stepId}`);
+    if (inputEl) inputEl.innerHTML = '<p class="text-xs text-green-600 mt-1">입력 완료</p>';
+    updateAgentStatus('진행 중', 'bg-blue-100 text-blue-700');
+}
+
+function handleAgentComplete(data) {
+    updateAgentStatus('완료', 'bg-green-100 text-green-700');
+    document.getElementById('agent-btn').disabled = false;
+    document.getElementById('generate-btn').disabled = false;
+
+    showToast('Agent 모드 완료! 최종 초안이 저장되었습니다.', 'success');
+
+    // Reload page to show new draft
+    setTimeout(() => location.reload(), 1500);
+}
+
+function handleAgentError(data) {
+    updateAgentStatus('오류', 'bg-red-100 text-red-700');
+    document.getElementById('agent-btn').disabled = false;
+    document.getElementById('generate-btn').disabled = false;
+    showToast(`Agent 오류: ${data.message}`, 'error');
+}
+
+function handleAgentDone() {
+    // Stream ended
+    if (document.getElementById('agent-status-badge').textContent === '진행 중') {
+        updateAgentStatus('완료', 'bg-green-100 text-green-700');
+    }
+}
+
+function updateAgentStatus(text, classes) {
+    const badge = document.getElementById('agent-status-badge');
+    badge.textContent = text;
+    badge.className = `ml-2 px-2 py-0.5 text-xs rounded-full ${classes}`;
+}
+
+function closeAgentWorkspace() {
+    document.getElementById('agent-workspace').classList.add('hidden');
+    document.getElementById('agent-btn').disabled = false;
+    document.getElementById('generate-btn').disabled = false;
+}
+
+function appendStepContent(stepId, content) {
+    const textEl = document.getElementById(`step-text-${stepId}`);
+    if (textEl) textEl.textContent += content;
+}
+
+// --- Evaluation ---
+
+function renderEvaluationTable(evalData) {
+    if (evalData.error) return `<p class="text-red-500">${evalData.error}</p>`;
+
+    let html = `<div class="mt-2">
+        <div class="flex items-center mb-2">
+            <span class="text-sm font-medium">종합 점수: </span>
+            <span class="ml-2 px-2 py-0.5 text-sm font-bold rounded ${evalData.overall_score >= 80 ? 'bg-green-100 text-green-700' : evalData.overall_score >= 60 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}">${evalData.overall_score}점</span>
+        </div>
+        <table class="w-full text-sm border">
+            <thead><tr class="bg-gray-50">
+                <th class="px-3 py-1.5 text-left border">카테고리</th>
+                <th class="px-3 py-1.5 text-left border">규칙</th>
+                <th class="px-3 py-1.5 text-center border">결과</th>
+                <th class="px-3 py-1.5 text-left border">코멘트</th>
+            </tr></thead><tbody>`;
+
+    if (evalData.items) {
+        evalData.items.forEach(item => {
+            html += `<tr>
+                <td class="px-3 py-1.5 border text-gray-600">${item.category}</td>
+                <td class="px-3 py-1.5 border">${item.rule}</td>
+                <td class="px-3 py-1.5 border text-center">${item.pass ? '<span class="eval-pass font-bold">PASS</span>' : '<span class="eval-fail font-bold">FAIL</span>'}</td>
+                <td class="px-3 py-1.5 border text-gray-600">${item.comment}</td>
+            </tr>`;
+        });
+    }
+
+    html += `</tbody></table>`;
+    if (evalData.summary) html += `<p class="mt-2 text-sm text-gray-600">${evalData.summary}</p>`;
+    html += `</div>`;
+    return html;
+}
+
+function toggleEvaluation(draftId) {
+    const evalEl = document.getElementById(`eval-${draftId}`);
+    if (!evalEl) return;
+
+    if (evalEl.classList.contains('hidden')) {
+        const data = draftEvaluations[draftId];
+        if (data) {
+            evalEl.innerHTML = renderEvaluationTable(data);
+        }
+        evalEl.classList.remove('hidden');
+    } else {
+        evalEl.classList.add('hidden');
+    }
+}
+
+// --- Finalize Draft ---
+
+async function finalizeDraft(draftId) {
+    try {
+        const resp = await fetch(`/api/linkedin/drafts/${draftId}/finalize`, { method: 'POST' });
+        if (resp.ok) {
+            showToast('Draft finalized!', 'success');
+            setTimeout(() => location.reload(), 500);
+        } else {
+            showToast('Failed to finalize', 'error');
+        }
+    } catch (e) {
+        showToast('Error finalizing draft', 'error');
+    }
+}
+
 // Remove "no drafts" message when a draft is generated
 document.body.addEventListener('htmx:afterSwap', function(evt) {
     if (evt.detail.target.id === 'drafts-container') {
         const noMessage = document.getElementById('no-drafts-message');
         if (noMessage) noMessage.remove();
         showToast('Draft generated successfully!', 'success');
+    }
+});
+
+// Keyboard shortcuts for article detail page
+document.addEventListener('keydown', function(e) {
+    // Skip if in input
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+    switch(e.key) {
+        case 'Escape':
+            // Close agent workspace if open, else go back
+            if (!document.getElementById('agent-workspace').classList.contains('hidden')) {
+                closeAgentWorkspace();
+            } else {
+                window.location.href = '/articles';
+            }
+            break;
+        case 's':
+            e.preventDefault();
+            toggleFavorite();
+            break;
+        case 'g':
+            e.preventDefault();
+            document.getElementById('generate-btn')?.click();
+            break;
+        case 'a':
+            e.preventDefault();
+            if (!document.getElementById('agent-btn').disabled) {
+                startAgentMode();
+            }
+            break;
     }
 });
 </script>

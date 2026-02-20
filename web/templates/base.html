@@ -58,6 +58,24 @@
         #custom-tooltip .tooltip-status.done { color: #86efac; }
         #custom-tooltip .tooltip-status.current { color: #93c5fd; }
         #custom-tooltip .tooltip-status.pending { color: #9ca3af; }
+
+        /* Keyboard shortcuts modal */
+        #shortcuts-modal {
+            display: none;
+        }
+        #shortcuts-modal.visible {
+            display: flex;
+        }
+        .kbd {
+            display: inline-block;
+            padding: 2px 6px;
+            font-family: monospace;
+            font-size: 12px;
+            background: #f3f4f6;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
     </style>
 
     {% block head %}{% endblock %}
@@ -78,14 +96,87 @@
                         <a href="/articles" class="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 hover:text-gray-900">
                             Articles
                         </a>
+                        <a href="/posts" class="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 hover:text-gray-900">
+                            Posts
+                        </a>
                         <a href="/settings" class="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 hover:text-gray-900">
                             Settings
                         </a>
                     </div>
                 </div>
+                <div class="flex items-center">
+                    <button onclick="toggleShortcutsModal()" class="p-2 text-gray-500 hover:text-gray-700" title="Keyboard shortcuts (?)">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                    </button>
+                </div>
             </div>
         </div>
     </nav>
+
+    <!-- Keyboard Shortcuts Modal -->
+    <div id="shortcuts-modal" class="fixed inset-0 z-50 items-center justify-center bg-black bg-opacity-50">
+        <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold">Keyboard Shortcuts</h3>
+                <button onclick="toggleShortcutsModal()" class="text-gray-500 hover:text-gray-700">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <h4 class="text-sm font-medium text-gray-700 mb-2">Articles List</h4>
+                    <div class="space-y-2 text-sm">
+                        <div class="flex justify-between">
+                            <span>Navigate down</span>
+                            <span class="kbd">j</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>Navigate up</span>
+                            <span class="kbd">k</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>Open selected article</span>
+                            <span><span class="kbd">o</span> or <span class="kbd">Enter</span></span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>Toggle favorite</span>
+                            <span class="kbd">s</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="border-t pt-4">
+                    <h4 class="text-sm font-medium text-gray-700 mb-2">Article Detail</h4>
+                    <div class="space-y-2 text-sm">
+                        <div class="flex justify-between">
+                            <span>Go back to list</span>
+                            <span class="kbd">Esc</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>Toggle favorite</span>
+                            <span class="kbd">s</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>Generate LinkedIn draft</span>
+                            <span class="kbd">g</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="border-t pt-4">
+                    <h4 class="text-sm font-medium text-gray-700 mb-2">Global</h4>
+                    <div class="space-y-2 text-sm">
+                        <div class="flex justify-between">
+                            <span>Show shortcuts</span>
+                            <span class="kbd">?</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Main Content -->
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -164,6 +255,40 @@
 
         document.body.addEventListener('htmx:responseError', function(evt) {
             showToast('An error occurred. Please try again.', 'error');
+        });
+
+        // Shortcuts modal toggle
+        function toggleShortcutsModal() {
+            const modal = document.getElementById('shortcuts-modal');
+            modal.classList.toggle('visible');
+        }
+
+        // Global keyboard shortcuts
+        document.addEventListener('keydown', function(e) {
+            // Skip if in input
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+            // ? to show shortcuts
+            if (e.key === '?') {
+                e.preventDefault();
+                toggleShortcutsModal();
+            }
+
+            // Escape to close modal
+            if (e.key === 'Escape') {
+                const modal = document.getElementById('shortcuts-modal');
+                if (modal.classList.contains('visible')) {
+                    e.preventDefault();
+                    modal.classList.remove('visible');
+                }
+            }
+        });
+
+        // Close modal on backdrop click
+        document.getElementById('shortcuts-modal')?.addEventListener('click', function(e) {
+            if (e.target === this) {
+                this.classList.remove('visible');
+            }
         });
     </script>
 
