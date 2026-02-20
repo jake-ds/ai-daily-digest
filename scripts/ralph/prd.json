@@ -14,7 +14,7 @@
         "python -m py_compile web/services/linkedin_service.py web/api/linkedin.py 통과"
       ],
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "notes": "data/linkedin_guidelines.md에 시나리오 F가 이미 정의되어 있음. 코드에만 누락된 상태"
     },
     {

@@ -1,0 +1,21 @@
+# Ralph Progress Log
+Started: 2026년 2월 21일 토요일 03시 32분 43초 KST
+
+## Codebase Patterns
+- SCENARIOS dict is in `web/services/linkedin_service.py` (module-level) - used by both service and API
+- `web/api/linkedin.py` has regex validators for scenario parameter (e.g., `^[A-F]$`) - update when adding scenarios
+- `detect_scenario()` uses keyword-based heuristics with priority ordering (first match wins)
+- Always `python -m py_compile` after editing Python files
+---
+
+## 2026-02-21 - LQ-001
+- Added Scenario F (권위자 관점 + 역설적 인사이트) to SCENARIOS dict with all required fields
+- Added Scenario F detection keywords to detect_scenario(): 권위자, expert, 통념, 학습, fomo, 배워야, 역설, misconception, myth, contrary
+- Updated regex in web/api/linkedin.py from ^[A-E]$ to ^[A-F]$ (both generate and agent endpoints)
+- Updated docstrings to reflect A-F range
+- Files changed: web/services/linkedin_service.py, web/api/linkedin.py
+- **Learnings for future iterations:**
+  - The regex `^[A-E]$` appears in TWO places in linkedin.py (generate_draft and agent_start) - use replace_all
+  - detect_scenario() has priority ordering: more specific keywords first, Scenario F keywords last since they're broader
+  - SCENARIOS dict fields: name, description, hook_style, structure, closing
+---
