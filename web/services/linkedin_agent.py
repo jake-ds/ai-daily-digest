@@ -194,18 +194,43 @@ class LinkedInAgent:
             session.status = "error"
             yield self._sse("agent_error", {"message": str(e), "session_id": session_id})
 
+    def _build_article_context(self, article: Article) -> str:
+        """Build enriched article context with metadata."""
+        lines = [
+            f"## 기사 정보",
+            f"- 제목: {article.title}",
+            f"- 출처: {article.source}",
+            f"- URL: {article.url}",
+            f"- 카테고리: {article.category or '미분류'}",
+            f"- 요약: {article.ai_summary or article.summary or '없음'}",
+        ]
+
+        if article.score and article.score >= 8:
+            lines.append(f"- 품질 점수: {article.score}/10 (고품질 기사 → 깊은 분석과 구체적 인사이트를 포함하세요)")
+        elif article.score and article.score <= 5:
+            lines.append(f"- 품질 점수: {article.score}/10 (간결한 코멘터리와 핵심 포인트 위주로 작성하세요)")
+        elif article.score:
+            lines.append(f"- 품질 점수: {article.score}/10")
+
+        if article.viral_score and article.viral_score > 0:
+            lines.append(f"- 바이럴 점수: {article.viral_score} (화제성 높은 뉴스 → 독자의 관심을 활용하되, 과장은 피하세요)")
+
+        authority_sources = ["mit", "stanford", "google", "deepmind", "openai", "anthropic", "meta ai", "microsoft research"]
+        if article.source and any(src in article.source.lower() for src in authority_sources):
+            lines.append(f"- 출처 권위: {article.source}는 권위 있는 연구/기술 기관입니다. 연구 권위를 강조하세요.")
+
+        return "\n".join(lines)
+
     async def _step_analyze(self, session: AgentSession, article: Article, scenario_info: dict) -> AsyncGenerator[str, None]:
         """Step 0: Analyze the article."""
         session.current_step = 0
         yield self._sse("step_start", {"step": 0, "name": "기사 분석"})
 
+        article_context = self._build_article_context(article)
+
         prompt = f"""다음 기사를 분석해주세요. LinkedIn 포스팅을 위한 핵심 정보를 추출합니다.
 
-## 기사 정보
-- 제목: {article.title}
-- 출처: {article.source}
-- URL: {article.url}
-- 요약: {article.ai_summary or article.summary or "없음"}
+{article_context}
 
 ## 분석 항목
 1. **핵심 팩트**: 기사의 주요 사실 3-5개
@@ -326,9 +351,7 @@ class LinkedInAgent:
 - 본문 구조: {scenario_info['structure']}
 - 마무리: {scenario_info['closing']}
 
-## 기사 정보
-- 제목: {article.title}
-- URL: {article.url}
+{self._build_article_context(article)}
 
 ## 페르소나
 - VC 심사역 + ML 엔지니어 출신 AI 빌더
