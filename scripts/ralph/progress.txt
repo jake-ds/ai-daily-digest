@@ -13,6 +13,14 @@ Started: 2026년 2월 21일 토요일 03시 32분 43초 KST
 - _scenario_cache (class var) caches Claude API results by article_id
 ---
 
+## 2026-02-21 - LQ-009
+- Added hot-reload: `self.guidelines = self._load_guidelines()` at start of generate_draft()
+- Agent _step_guidelines_check() also reloads from file: `guidelines = self._load_guidelines() or guidelines`
+- __init__ load preserved as initial value; generation-time reload ensures latest guidelines
+- Files changed: web/services/linkedin_service.py, web/services/linkedin_agent.py
+- **Learnings:** Simple one-line additions per file. Uses `or` fallback to keep existing guidelines if file read fails.
+---
+
 ## 2026-02-21 - LQ-008
 - Upgraded detect_scenario() to use Claude API (claude-haiku-4-5-20251001) with keyword fallback
 - Added detect_scenario_detailed() returning {scenario, confidence, reason}

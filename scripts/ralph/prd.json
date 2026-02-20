@@ -138,7 +138,7 @@
         "python -m py_compile 통과"
       ],
       "priority": 9,
-      "passes": false,
+      "passes": true,
       "notes": "간단한 변경이지만, 지침 학습 시스템과의 연결고리로 중요"
     },
     {
