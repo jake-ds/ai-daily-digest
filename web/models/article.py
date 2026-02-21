@@ -1,7 +1,7 @@
 """Article model for storing collected articles."""
 
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, DateTime, Text, Float, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, Text, Float, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 
 from web.database import Base
@@ -32,6 +32,11 @@ class Article(Base):
 
     # LinkedIn status
     linkedin_status = Column(String(50), default="none")  # none, generated, posted
+
+    # Read/Favorite status
+    is_read = Column(Boolean, default=False, index=True)
+    is_favorite = Column(Boolean, default=False, index=True)
+    read_at = Column(DateTime, nullable=True)
 
     # Relationships
     collection = relationship("Collection", back_populates="articles")
@@ -64,6 +69,9 @@ class Article(Base):
             "collection_id": self.collection_id,
             "notion_page_id": self.notion_page_id,
             "linkedin_status": self.linkedin_status,
+            "is_read": self.is_read,
+            "is_favorite": self.is_favorite,
+            "read_at": self.read_at.isoformat() if self.read_at else None,
         }
 
         if include_drafts:

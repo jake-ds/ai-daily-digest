@@ -45,14 +45,14 @@ async def get_scenarios():
 @router.post("/generate/{article_id}")
 async def generate_draft(
     article_id: int,
-    scenario: Optional[str] = Query(default=None, regex="^[A-E]$"),
+    scenario: Optional[str] = Query(default=None, regex="^[A-F]$"),
     db: Session = Depends(get_db),
 ):
     """
     Generate a LinkedIn draft for an article.
 
     - **article_id**: Article ID to generate draft for
-    - **scenario**: Scenario (A-E), auto-detected if not provided
+    - **scenario**: Scenario (A-F), auto-detected if not provided
     """
     article = db.query(Article).filter(Article.id == article_id).first()
     if not article:
@@ -135,7 +135,7 @@ async def delete_draft(
 @router.post("/agent/start/{article_id}")
 async def agent_start(
     article_id: int,
-    scenario: Optional[str] = Query(default=None, regex="^[A-E]$"),
+    scenario: Optional[str] = Query(default=None, regex="^[A-F]$"),
     db: Session = Depends(get_db),
 ):
     """Start an agent session for article. Returns SSE stream."""
