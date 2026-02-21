@@ -1,20 +1,29 @@
 """Articles API endpoints."""
 
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from typing import Optional
 
 from web.database import get_db
 from web.models import Article
+from web.config import ANTHROPIC_API_KEY
 
 router = APIRouter(prefix="/api/articles", tags=["articles"])
 
 
 @router.get("")
 async def get_articles(
+    q: Optional[str] = Query(default=None, description="Search query for title/summary"),
     category: Optional[str] = Query(default=None),
     linkedin_status: Optional[str] = Query(default=None),
     collection_id: Optional[int] = Query(default=None),
+    favorite: Optional[bool] = Query(default=None, description="Filter favorites only"),
+    unread: Optional[bool] = Query(default=None, description="Filter unread only"),
+    min_score: Optional[float] = Query(default=None, description="Minimum score filter"),
+    max_score: Optional[float] = Query(default=None, description="Maximum score filter"),
+    date_range: Optional[str] = Query(default=None, description="today/week/month/all"),
     page: int = Query(default=1, ge=1),
     per_page: int = Query(default=20, le=100),
     sort_by: str = Query(default="collected_at"),
@@ -22,17 +31,34 @@ async def get_articles(
     db: Session = Depends(get_db),
 ):
     """
-    Get paginated list of articles.
+    Get paginated list of articles with search and filtering.
 
+    - **q**: Search in title and summary
     - **category**: Filter by category (bigtech, research, news, viral, etc.)
     - **linkedin_status**: Filter by LinkedIn status (none, generated, posted)
     - **collection_id**: Filter by collection
+    - **favorite**: Filter favorites only (true/false)
+    - **unread**: Filter unread only (true/false)
+    - **min_score**: Minimum score filter
+    - **max_score**: Maximum score filter
+    - **date_range**: Filter by date (today/week/month/all)
     - **page**: Page number
     - **per_page**: Items per page
     - **sort_by**: Field to sort by (collected_at, score, published_at)
     - **sort_order**: Sort order (asc, desc)
     """
     query = db.query(Article)
+
+    # Apply search query
+    if q:
+        search_pattern = f"%{q}%"
+        query = query.filter(
+            or_(
+                Article.title.ilike(search_pattern),
+                Article.summary.ilike(search_pattern),
+                Article.ai_summary.ilike(search_pattern),
+            )
+        )
 
     # Apply filters
     if category:
@@ -41,6 +67,33 @@ async def get_articles(
         query = query.filter(Article.linkedin_status == linkedin_status)
     if collection_id:
         query = query.filter(Article.collection_id == collection_id)
+
+    # Favorite/Read filters
+    if favorite is True:
+        query = query.filter(Article.is_favorite == True)
+    if unread is True:
+        query = query.filter(Article.is_read == False)
+
+    # Score filters
+    if min_score is not None:
+        query = query.filter(Article.score >= min_score)
+    if max_score is not None:
+        query = query.filter(Article.score <= max_score)
+
+    # Date range filter
+    if date_range:
+        now = datetime.utcnow()
+        if date_range == "today":
+            cutoff = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        elif date_range == "week":
+            cutoff = now - timedelta(days=7)
+        elif date_range == "month":
+            cutoff = now - timedelta(days=30)
+        else:
+            cutoff = None
+
+        if cutoff:
+            query = query.filter(Article.collected_at >= cutoff)
 
     # Get total count
     total = query.count()
@@ -71,8 +124,6 @@ async def get_top_articles(
     db: Session = Depends(get_db),
 ):
     """Get top-scoring articles from recent collections."""
-    from datetime import datetime, timedelta
-
     cutoff = datetime.utcnow() - timedelta(days=7)
 
     articles = (
@@ -139,3 +190,125 @@ async def update_article(
     db.refresh(article)
 
     return article.to_dict()
+
+
+@router.post("/{article_id}/favorite")
+async def toggle_favorite(
+    article_id: int,
+    db: Session = Depends(get_db),
+):
+    """Toggle article favorite status."""
+    article = db.query(Article).filter(Article.id == article_id).first()
+    if not article:
+        raise HTTPException(status_code=404, detail="Article not found")
+
+    article.is_favorite = not article.is_favorite
+    db.commit()
+    db.refresh(article)
+
+    return {
+        "id": article.id,
+        "is_favorite": article.is_favorite,
+    }
+
+
+@router.post("/{article_id}/read")
+async def mark_as_read(
+    article_id: int,
+    db: Session = Depends(get_db),
+):
+    """Mark article as read."""
+    article = db.query(Article).filter(Article.id == article_id).first()
+    if not article:
+        raise HTTPException(status_code=404, detail="Article not found")
+
+    if not article.is_read:
+        article.is_read = True
+        article.read_at = datetime.utcnow()
+        db.commit()
+        db.refresh(article)
+
+    return {
+        "id": article.id,
+        "is_read": article.is_read,
+        "read_at": article.read_at.isoformat() if article.read_at else None,
+    }
+
+
+@router.post("/batch-summarize")
+async def batch_summarize(
+    limit: int = Query(default=20, le=50),
+    offset: int = Query(default=0, ge=0),
+    force: bool = Query(default=False, description="Force re-summarize all articles including existing ones"),
+    db: Session = Depends(get_db),
+):
+    """Batch generate Korean AI summaries for articles."""
+    if not ANTHROPIC_API_KEY:
+        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not configured")
+
+    import anthropic
+
+    if force:
+        # Re-summarize all articles (overwrite English summaries)
+        articles = (
+            db.query(Article)
+            .order_by(Article.score.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+    else:
+        # Only articles without ai_summary
+        articles = (
+            db.query(Article)
+            .filter(or_(Article.ai_summary == None, Article.ai_summary == ""))
+            .order_by(Article.score.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+
+    if not articles:
+        return {"processed": 0, "remaining": 0, "message": "처리할 기사가 없습니다"}
+
+    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    processed = 0
+
+    for article in articles:
+        prompt = f"""다음 기사를 한글로 1-2문장으로 핵심만 요약해주세요.
+반드시 한글로 작성하세요. 영어 전문용어(AI, LLM, GPT 등)는 그대로 사용해도 됩니다.
+마크다운 헤더(#)나 서식 없이 순수 텍스트로만 작성하세요.
+
+제목: {article.title}
+출처: {article.source or ""}
+내용: {article.summary or "내용 없음"}
+
+한글 요약:"""
+
+        try:
+            response = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=150,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            article.ai_summary = response.content[0].text.strip()
+            processed += 1
+        except Exception as e:
+            print(f"[Summarize] Failed for article {article.id}: {e}")
+            continue
+
+    db.commit()
+
+    # Count remaining
+    total_articles = db.query(Article).count()
+
+    return {
+        "processed": processed,
+        "remaining": total_articles - processed if force else (
+            db.query(Article)
+            .filter(or_(Article.ai_summary == None, Article.ai_summary == ""))
+            .count()
+        ),
+        "total": total_articles,
+        "message": f"{processed}개 기사 한글 요약 완료",
+    }

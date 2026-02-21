@@ -7,64 +7,148 @@
     <!-- Header -->
     <div class="flex justify-between items-center">
         <h1 class="text-2xl font-bold text-gray-900">Articles</h1>
-        <span class="text-sm text-gray-500">{{ total }} total</span>
+        <div class="flex items-center gap-3">
+            {% if unsummarized_count > 0 %}
+            <button id="btn-summarize" onclick="batchSummarize()"
+                    class="px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
+                한글 요약 생성 (<span id="unsummarized-count">{{ unsummarized_count }}</span>)
+            </button>
+            {% endif %}
+            <span class="text-sm text-gray-500">{{ total }} total</span>
+        </div>
     </div>
 
-    <!-- Filters -->
-    <div class="bg-white rounded-lg shadow p-4">
+    <!-- Search and Filters -->
+    <div class="bg-white rounded-lg shadow p-4 space-y-4">
+        <!-- Search Bar -->
+        <form id="search-form" class="flex gap-2">
+            <input type="text" name="q" id="search-input"
+                   value="{{ search_query or '' }}"
+                   placeholder="Search articles..."
+                   class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+            <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                Search
+            </button>
+        </form>
+
+        <!-- Category Filters -->
         <div class="flex flex-wrap gap-2">
-            <a href="/articles"
-               class="px-3 py-1.5 text-sm rounded-full {% if not current_category %}bg-blue-600 text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %}">
+            <a href="javascript:void(0)" data-filter="category" data-value=""
+               class="filter-btn px-3 py-1.5 text-sm rounded-full {% if not current_category %}bg-blue-600 text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %}">
                 All
             </a>
             {% for cat, count in categories %}
-            <a href="/articles?category={{ cat }}"
-               class="px-3 py-1.5 text-sm rounded-full {% if current_category == cat %}bg-blue-600 text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %}">
+            <a href="javascript:void(0)" data-filter="category" data-value="{{ cat }}"
+               class="filter-btn px-3 py-1.5 text-sm rounded-full {% if current_category == cat %}bg-blue-600 text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %}">
                 {{ cat or 'unknown' }} ({{ count }})
             </a>
             {% endfor %}
+        </div>
+
+        <!-- Advanced Filters -->
+        <div class="flex flex-wrap gap-4 pt-2 border-t">
+            <!-- Date Range -->
+            <div class="flex items-center gap-2">
+                <label class="text-sm text-gray-600">Period:</label>
+                <select id="filter-date-range" class="text-sm border rounded px-2 py-1">
+                    <option value="" {% if not date_range %}selected{% endif %}>All</option>
+                    <option value="today" {% if date_range == 'today' %}selected{% endif %}>Today</option>
+                    <option value="week" {% if date_range == 'week' %}selected{% endif %}>This Week</option>
+                    <option value="month" {% if date_range == 'month' %}selected{% endif %}>This Month</option>
+                </select>
+            </div>
+
+            <!-- Score Filter -->
+            <div class="flex items-center gap-2">
+                <label class="text-sm text-gray-600">Min Score:</label>
+                <select id="filter-min-score" class="text-sm border rounded px-2 py-1">
+                    <option value="" {% if not min_score %}selected{% endif %}>All</option>
+                    <option value="5" {% if min_score == 5 %}selected{% endif %}>5+</option>
+                    <option value="7" {% if min_score == 7 %}selected{% endif %}>7+</option>
+                    <option value="8" {% if min_score == 8 %}selected{% endif %}>8+</option>
+                    <option value="9" {% if min_score == 9 %}selected{% endif %}>9+</option>
+                </select>
+            </div>
+
+            <!-- Status Filters -->
+            <div class="flex items-center gap-4">
+                <label class="flex items-center gap-1 cursor-pointer">
+                    <input type="checkbox" id="filter-favorite" class="rounded" {% if show_favorite %}checked{% endif %}>
+                    <span class="text-sm text-gray-600">Favorites</span>
+                </label>
+                <label class="flex items-center gap-1 cursor-pointer">
+                    <input type="checkbox" id="filter-unread" class="rounded" {% if show_unread %}checked{% endif %}>
+                    <span class="text-sm text-gray-600">Unread</span>
+                </label>
+            </div>
         </div>
     </div>
 
     <!-- Articles Grid -->
     {% if articles %}
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <div id="articles-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {% for article in articles %}
-        <a href="/articles/{{ article.id }}" class="block bg-white rounded-lg shadow hover:shadow-md transition">
-            <div class="p-5">
-                <div class="flex items-start justify-between mb-3">
-                    <span class="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded">
-                        {{ article.category or 'unknown' }}
-                    </span>
-                    <span class="px-2 py-1 text-xs font-bold bg-blue-100 text-blue-800 rounded">
-                        {{ "%.1f"|format(article.score) }}
-                    </span>
-                </div>
+        <div class="article-card relative" data-article-id="{{ article.id }}" data-index="{{ loop.index0 }}">
+            <a href="/articles/{{ article.id }}" class="block bg-white rounded-lg shadow hover:shadow-md transition {% if not article.is_read %}ring-2 ring-blue-200{% endif %}">
+                <div class="p-5">
+                    <div class="flex items-start justify-between mb-3">
+                        <div class="flex items-center gap-2">
+                            <!-- Read indicator -->
+                            <span class="w-2 h-2 rounded-full {% if article.is_read %}bg-gray-300{% else %}bg-blue-500{% endif %}"></span>
+                            <span class="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded">
+                                {{ article.category or 'unknown' }}
+                            </span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <!-- Favorite button -->
+                            <button onclick="event.preventDefault(); event.stopPropagation(); toggleFavorite({{ article.id }}, this);"
+                                    class="favorite-btn text-lg hover:scale-110 transition"
+                                    data-favorite="{{ 'true' if article.is_favorite else 'false' }}">
+                                {% if article.is_favorite %}
+                                <span class="text-yellow-500">&#9733;</span>
+                                {% else %}
+                                <span class="text-gray-300 hover:text-yellow-400">&#9734;</span>
+                                {% endif %}
+                            </button>
+                            <span class="px-2 py-1 text-xs font-bold bg-blue-100 text-blue-800 rounded">
+                                {{ "%.1f"|format(article.score) }}
+                            </span>
+                        </div>
+                    </div>
 
-                <h3 class="font-semibold text-gray-900 line-clamp-2 mb-2">{{ article.title }}</h3>
+                    <h3 class="font-semibold text-gray-900 line-clamp-2 mb-2">{{ article.title }}</h3>
 
-                <p class="text-sm text-gray-600 line-clamp-3 mb-3">
-                    {{ article.ai_summary or article.summary or 'No summary available' }}
-                </p>
-
-                <div class="flex items-center justify-between text-xs text-gray-500">
-                    <span>{{ article.source }}</span>
-                    <span>{{ article.collected_at.strftime('%m/%d %H:%M') if article.collected_at else '' }}</span>
-                </div>
-
-                {% if article.linkedin_status != 'none' %}
-                <div class="mt-3 pt-3 border-t">
-                    <span class="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded">
-                        {% if article.linkedin_status == 'generated' %}
-                        Draft Generated
+                    <p class="text-sm text-gray-600 line-clamp-3 mb-3">
+                        {% if article.ai_summary %}
+                        {{ article.ai_summary }}
+                        {% elif article.summary %}
+                        <span class="text-gray-400 italic">{{ article.summary }}</span>
                         {% else %}
-                        Posted
+                        <span class="text-gray-400">요약 없음</span>
                         {% endif %}
-                    </span>
+                    </p>
+
+                    <div class="flex items-center justify-between text-xs text-gray-500">
+                        <span>{{ article.source }}</span>
+                        <span>{{ article.collected_at.strftime('%m/%d %H:%M') if article.collected_at else '' }}</span>
+                    </div>
+
+                    {% if article.linkedin_status != 'none' %}
+                    <div class="mt-3 pt-3 border-t">
+                        <span class="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded">
+                            {% if article.linkedin_status == 'generated' %}
+                            Draft Generated
+                            {% else %}
+                            Posted
+                            {% endif %}
+                        </span>
+                    </div>
+                    {% endif %}
                 </div>
-                {% endif %}
-            </div>
-        </a>
+            </a>
+            <!-- Selection indicator for keyboard navigation -->
+            <div class="keyboard-selected hidden absolute inset-0 ring-2 ring-blue-500 rounded-lg pointer-events-none"></div>
+        </div>
         {% endfor %}
     </div>
 
@@ -72,7 +156,7 @@
     {% if total_pages > 1 %}
     <div class="flex justify-center space-x-2">
         {% if page > 1 %}
-        <a href="/articles?{% if current_category %}category={{ current_category }}&{% endif %}page={{ page - 1 }}"
+        <a href="javascript:void(0)" onclick="goToPage({{ page - 1 }})"
            class="px-4 py-2 bg-white border rounded-lg hover:bg-gray-50">
             Previous
         </a>
@@ -83,7 +167,7 @@
         </span>
 
         {% if page < total_pages %}
-        <a href="/articles?{% if current_category %}category={{ current_category }}&{% endif %}page={{ page + 1 }}"
+        <a href="javascript:void(0)" onclick="goToPage({{ page + 1 }})"
            class="px-4 py-2 bg-white border rounded-lg hover:bg-gray-50">
             Next
         </a>
@@ -93,9 +177,206 @@
 
     {% else %}
     <div class="bg-white rounded-lg shadow p-8 text-center">
-        <p class="text-gray-500">No articles found{% if current_category %} in category "{{ current_category }}"{% endif %}.</p>
+        <p class="text-gray-500">No articles found{% if current_category %} in category "{{ current_category }}"{% endif %}{% if search_query %} matching "{{ search_query }}"{% endif %}.</p>
         <a href="/" class="mt-4 inline-block text-blue-600 hover:text-blue-800">Run a collection to get started</a>
     </div>
     {% endif %}
 </div>
+
+<script>
+// Current filters state
+let currentFilters = {
+    q: '{{ search_query or "" }}',
+    category: '{{ current_category or "" }}',
+    date_range: '{{ date_range or "" }}',
+    min_score: '{{ min_score or "" }}',
+    favorite: {{ 'true' if show_favorite else 'false' }},
+    unread: {{ 'true' if show_unread else 'false' }},
+    page: {{ page }}
+};
+
+// Keyboard navigation state
+let selectedIndex = -1;
+
+// Build URL from filters
+function buildFilterUrl() {
+    const params = new URLSearchParams();
+    if (currentFilters.q) params.set('q', currentFilters.q);
+    if (currentFilters.category) params.set('category', currentFilters.category);
+    if (currentFilters.date_range) params.set('date_range', currentFilters.date_range);
+    if (currentFilters.min_score) params.set('min_score', currentFilters.min_score);
+    if (currentFilters.favorite) params.set('favorite', '1');
+    if (currentFilters.unread) params.set('unread', '1');
+    if (currentFilters.page > 1) params.set('page', currentFilters.page);
+    return '/articles' + (params.toString() ? '?' + params.toString() : '');
+}
+
+// Apply filters
+function applyFilters() {
+    currentFilters.page = 1; // Reset page on filter change
+    window.location.href = buildFilterUrl();
+}
+
+// Go to page
+function goToPage(page) {
+    currentFilters.page = page;
+    window.location.href = buildFilterUrl();
+}
+
+// Toggle favorite
+async function toggleFavorite(articleId, btn) {
+    try {
+        const response = await fetch(`/api/articles/${articleId}/favorite`, { method: 'POST' });
+        const data = await response.json();
+
+        if (data.is_favorite) {
+            btn.innerHTML = '<span class="text-yellow-500">&#9733;</span>';
+            btn.dataset.favorite = 'true';
+        } else {
+            btn.innerHTML = '<span class="text-gray-300 hover:text-yellow-400">&#9734;</span>';
+            btn.dataset.favorite = 'false';
+        }
+        showToast(data.is_favorite ? 'Added to favorites' : 'Removed from favorites');
+    } catch (e) {
+        showToast('Failed to update favorite', 'error');
+    }
+}
+
+// Keyboard navigation
+function updateSelection(newIndex) {
+    const cards = document.querySelectorAll('.article-card');
+    if (cards.length === 0) return;
+
+    // Remove previous selection
+    cards.forEach(c => c.querySelector('.keyboard-selected')?.classList.add('hidden'));
+
+    // Clamp index
+    selectedIndex = Math.max(0, Math.min(newIndex, cards.length - 1));
+
+    // Show selection
+    const selected = cards[selectedIndex];
+    selected.querySelector('.keyboard-selected')?.classList.remove('hidden');
+    selected.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function openSelectedArticle() {
+    const cards = document.querySelectorAll('.article-card');
+    if (selectedIndex >= 0 && selectedIndex < cards.length) {
+        const articleId = cards[selectedIndex].dataset.articleId;
+        window.location.href = `/articles/${articleId}`;
+    }
+}
+
+function toggleSelectedFavorite() {
+    const cards = document.querySelectorAll('.article-card');
+    if (selectedIndex >= 0 && selectedIndex < cards.length) {
+        const btn = cards[selectedIndex].querySelector('.favorite-btn');
+        const articleId = cards[selectedIndex].dataset.articleId;
+        if (btn) toggleFavorite(articleId, btn);
+    }
+}
+
+// Batch summarize
+async function batchSummarize() {
+    const btn = document.getElementById('btn-summarize');
+    const countSpan = document.getElementById('unsummarized-count');
+    if (!btn) return;
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="animate-pulse">요약 생성 중...</span>';
+
+    try {
+        const response = await fetch('/api/articles/batch-summarize', { method: 'POST' });
+        const data = await response.json();
+
+        if (data.remaining > 0) {
+            countSpan.textContent = data.remaining;
+            btn.innerHTML = `한글 요약 생성 (<span id="unsummarized-count">${data.remaining}</span>)`;
+            btn.disabled = false;
+            showToast(`${data.processed}개 완료, ${data.remaining}개 남음`);
+        } else {
+            btn.remove();
+            showToast(data.message);
+            // Reload to show updated summaries
+            setTimeout(() => window.location.reload(), 500);
+        }
+    } catch (e) {
+        btn.innerHTML = '한글 요약 생성 (오류)';
+        btn.disabled = false;
+        showToast('요약 생성 실패', 'error');
+    }
+}
+
+// Event listeners
+document.addEventListener('DOMContentLoaded', function() {
+    // Search form
+    document.getElementById('search-form')?.addEventListener('submit', function(e) {
+        e.preventDefault();
+        currentFilters.q = document.getElementById('search-input').value;
+        applyFilters();
+    });
+
+    // Category filter buttons
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            currentFilters.category = this.dataset.value;
+            applyFilters();
+        });
+    });
+
+    // Date range select
+    document.getElementById('filter-date-range')?.addEventListener('change', function() {
+        currentFilters.date_range = this.value;
+        applyFilters();
+    });
+
+    // Min score select
+    document.getElementById('filter-min-score')?.addEventListener('change', function() {
+        currentFilters.min_score = this.value;
+        applyFilters();
+    });
+
+    // Favorite checkbox
+    document.getElementById('filter-favorite')?.addEventListener('change', function() {
+        currentFilters.favorite = this.checked;
+        applyFilters();
+    });
+
+    // Unread checkbox
+    document.getElementById('filter-unread')?.addEventListener('change', function() {
+        currentFilters.unread = this.checked;
+        applyFilters();
+    });
+
+    // Keyboard shortcuts (only on articles list page)
+    document.addEventListener('keydown', function(e) {
+        // Skip if in input
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+        switch(e.key) {
+            case 'j':
+                e.preventDefault();
+                updateSelection(selectedIndex + 1);
+                break;
+            case 'k':
+                e.preventDefault();
+                updateSelection(selectedIndex - 1);
+                break;
+            case 'o':
+            case 'Enter':
+                if (selectedIndex >= 0) {
+                    e.preventDefault();
+                    openSelectedArticle();
+                }
+                break;
+            case 's':
+                if (selectedIndex >= 0) {
+                    e.preventDefault();
+                    toggleSelectedFavorite();
+                }
+                break;
+        }
+    });
+});
+</script>
 {% endblock %}

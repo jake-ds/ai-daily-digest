@@ -164,12 +164,20 @@ async def articles_list(
         .all()
     )
 
+    # Count articles without Korean summary
+    unsummarized_count = (
+        db.query(Article)
+        .filter(or_(Article.ai_summary == None, Article.ai_summary == ""))
+        .count()
+    )
+
     return templates.TemplateResponse(
         "articles/list.html",
         {
             "request": request,
             "articles": articles,
             "categories": categories,
+            "unsummarized_count": unsummarized_count,
             "current_category": category,
             "search_query": q,
             "date_range": date_range,
