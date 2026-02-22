@@ -462,6 +462,95 @@ class LinkedInService:
 4. "요약하면~"
 """
 
+    def chat_refine_by_draft(self, draft_id: int, user_message: str) -> dict:
+        """Refine draft via chat message using draft from DB (no session needed).
+
+        Args:
+            draft_id: LinkedInDraft ID
+            user_message: User's chat message
+
+        Returns:
+            dict with revised_draft, char_count, chat_history, updated_content
+        """
+        import time as _time
+
+        draft = self.db.query(LinkedInDraft).filter(LinkedInDraft.id == draft_id).first()
+        if not draft:
+            raise ValueError(f"Draft {draft_id} not found")
+
+        current_content = draft.draft_content
+
+        # 기존 채팅 이력 로드
+        chat_messages = []
+        if draft.chat_history:
+            try:
+                chat_messages = json.loads(draft.chat_history)
+            except json.JSONDecodeError:
+                chat_messages = []
+
+        # 채팅 컨텍스트 구성
+        chat_context = ""
+        for msg in chat_messages:
+            role_label = "사용자" if msg["role"] == "user" else "어시스턴트"
+            chat_context += f"\n[{role_label}]: {msg['content']}\n"
+
+        # 가이드라인 체크리스트 (draft에 저장된 것 사용)
+        checklist_section = ""
+        if draft.guidelines_checklist:
+            checklist_section = f"""
+## 적용된 가이드라인 체크리스트
+{draft.guidelines_checklist}
+"""
+
+        # 기사 분석 (agent 모드에서 저장된 것)
+        analysis_section = ""
+        if draft.analysis:
+            analysis_section = f"""
+## 기사 분석
+{draft.analysis}
+"""
+
+        prompt = f"""다음 LinkedIn 포스트를 사용자의 요청에 따라 수정해주세요.
+
+## 현재 초안
+{current_content}
+{analysis_section}{checklist_section}{f'''
+## 이전 대화
+{chat_context}
+''' if chat_context else ''}
+## 사용자 요청
+{user_message}
+
+## 중요
+- 사용자의 요청사항만 반영하고, 나머지는 그대로 유지하세요
+- LinkedIn 포스트 본문만 출력하세요
+- 설명 없이 바로 사용 가능한 형태
+- 1200자 이상 1800자 이하 유지"""
+
+        response = self.client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=2000,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        revised = response.content[0].text
+
+        # 채팅 이력 업데이트
+        timestamp = _time.strftime("%Y-%m-%d %H:%M:%S")
+        chat_messages.append({"role": "user", "content": user_message, "timestamp": timestamp})
+        chat_messages.append({"role": "assistant", "content": f"수정 완료 ({len(revised)}자)", "timestamp": timestamp})
+
+        # DB 업데이트
+        draft.draft_content = revised
+        draft.chat_history = json.dumps(chat_messages, ensure_ascii=False)
+        self.db.commit()
+
+        return {
+            "revised_draft": revised,
+            "char_count": len(revised),
+            "chat_history": chat_messages,
+            "updated_content": revised,
+        }
+
     def get_scenarios(self) -> dict:
         """Get all available scenarios."""
         return SCENARIOS

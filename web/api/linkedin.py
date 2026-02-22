@@ -302,6 +302,26 @@ async def agent_chat(
     return result
 
 
+@router.post("/drafts/{draft_id}/chat")
+async def draft_chat(
+    draft_id: int,
+    data: ChatMessage,
+    db: Session = Depends(get_db),
+):
+    """Send a chat message to refine a draft (draft-based, no session needed)."""
+    draft = db.query(LinkedInDraft).filter(LinkedInDraft.id == draft_id).first()
+    if not draft:
+        raise HTTPException(status_code=404, detail="Draft not found")
+
+    service = LinkedInService(db)
+
+    try:
+        result = service.chat_refine_by_draft(draft_id, data.message)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Chat refine failed: {str(e)}")
+
+
 @router.patch("/drafts/{draft_id}/content")
 async def update_draft_content(
     draft_id: int,

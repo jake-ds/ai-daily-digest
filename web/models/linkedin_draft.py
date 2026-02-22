@@ -28,6 +28,7 @@ class LinkedInDraft(Base):
     user_feedback = Column(Text, nullable=True)     # 사용자 피드백 JSON
     iteration_count = Column(Integer, default=1)    # 검토 반복 횟수
     chat_history = Column(Text, nullable=True)      # JSON: [{role, content, timestamp}]
+    guidelines_checklist = Column(Text, nullable=True)  # 가이드라인 체크리스트 (agent 모드)
 
     # 포스팅 상태 관련
     status = Column(String(20), default="draft")    # "draft" | "final" | "published"
@@ -57,6 +58,7 @@ class LinkedInDraft(Base):
             "user_feedback": self.user_feedback,
             "iteration_count": self.iteration_count or 1,
             "chat_history": self.chat_history,
+            "guidelines_checklist": self.guidelines_checklist,
             "status": self.status or "draft",
             "linkedin_url": self.linkedin_url,
             "published_at": self.published_at.isoformat() if self.published_at else None,

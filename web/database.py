@@ -49,6 +49,7 @@ def migrate_db():
             "linkedin_url": "TEXT",
             "published_at": "DATETIME",
             "chat_history": "TEXT",
+            "guidelines_checklist": "TEXT",
         }
         with engine.begin() as conn:
             for col_name, col_type in new_columns.items():

@@ -641,6 +641,7 @@ JSON만 출력하세요. 다른 설명은 불필요합니다."""
             evaluation=session.evaluation,
             user_feedback=session.user_feedback,
             iteration_count=session.iteration_count,
+            guidelines_checklist=session.guidelines_checklist,
             status="final",
         )
         self.db.add(draft)
