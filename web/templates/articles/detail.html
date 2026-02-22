@@ -133,6 +133,42 @@
     .scorecard-category.cat-mixed { border-color: #f59e0b; }
     .scorecard-item-pass { color: #16a34a; }
     .scorecard-item-fail { color: #dc2626; }
+
+    /* Compare panel styles */
+    .compare-panel {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+    }
+    .compare-card {
+        border: 2px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 16px;
+        background: white;
+    }
+    .compare-card.selected-final {
+        border-color: #22c55e;
+        box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.15);
+    }
+    .compare-hook {
+        background: #fef3c7;
+        border-radius: 6px;
+        padding: 8px 12px;
+        font-weight: 600;
+        font-size: 14px;
+        line-height: 1.5;
+        white-space: pre-wrap;
+    }
+    .compare-bar {
+        height: 8px;
+        border-radius: 4px;
+        transition: width 0.3s ease;
+    }
+    .compare-checkbox {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+    }
 </style>
 {% endblock %}
 
@@ -514,10 +550,33 @@
             </div>
         </div>
 
+        <!-- Compare Button (shown when 2+ drafts) -->
+        {% if drafts|length >= 2 %}
+        <div class="mt-6 flex items-center justify-between">
+            <h3 class="text-lg font-semibold text-gray-800">Drafts ({{ drafts|length }})</h3>
+            <button id="compare-btn" onclick="toggleCompareMode()"
+                    class="px-4 py-2 text-sm bg-emerald-100 text-emerald-700 rounded-lg hover:bg-emerald-200 font-medium">
+                비교
+            </button>
+        </div>
+        {% endif %}
+
+        <!-- Compare Panel (hidden by default) -->
+        <div id="compare-panel" class="hidden mt-4 border-2 border-emerald-200 rounded-xl p-5 bg-emerald-50">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-bold text-emerald-800">드래프트 비교</h3>
+                <button onclick="closeComparePanel()" class="text-gray-500 hover:text-gray-700 text-xl">&times;</button>
+            </div>
+            <div id="compare-content" class="compare-panel"></div>
+        </div>
+
         <!-- Drafts Container -->
         <div id="drafts-container" class="mt-6 space-y-4">
             {% for draft in drafts|sort(attribute='version', reverse=true) %}
-            <div class="border rounded-lg p-4 bg-gray-50">
+            <div class="border rounded-lg p-4 bg-gray-50 relative" data-draft-id="{{ draft.id }}">
+                <!-- Compare checkbox (hidden by default) -->
+                <input type="checkbox" class="compare-checkbox hidden" id="compare-cb-{{ draft.id }}"
+                       onchange="onCompareSelect({{ draft.id }})" title="비교할 드래프트 선택">
                 <div class="flex items-center justify-between mb-3">
                     <div class="flex items-center space-x-2">
                         <span class="px-2 py-1 text-xs font-medium bg-purple-100 text-purple-800 rounded">
@@ -665,6 +724,23 @@ let agentSessionId = null;
 let agentDraftId = null;
 let eventSource = null;
 let stepReferenceData = {};
+
+// Draft data for comparison
+const allDrafts = {};
+{% for draft in drafts %}
+allDrafts[{{ draft.id }}] = {
+    id: {{ draft.id }},
+    scenario: "{{ draft.scenario or '' }}",
+    version: {{ draft.version or 1 }},
+    status: "{{ draft.status or 'draft' }}",
+    generation_mode: "{{ draft.generation_mode or 'simple' }}",
+    content: {{ draft.draft_content | tojson }},
+};
+{% endfor %}
+
+// Compare mode state
+let compareMode = false;
+let compareSelected = [];
 
 // Mark as read on page load
 document.addEventListener('DOMContentLoaded', function() {
@@ -1213,6 +1289,149 @@ async function finalizeDraft(draftId) {
         }
     } catch (e) {
         showToast('Error finalizing draft', 'error');
+    }
+}
+
+// --- Draft Compare Mode ---
+
+function toggleCompareMode() {
+    compareMode = !compareMode;
+    compareSelected = [];
+    const btn = document.getElementById('compare-btn');
+    const checkboxes = document.querySelectorAll('.compare-checkbox');
+
+    if (compareMode) {
+        btn.textContent = '비교 취소';
+        btn.className = 'px-4 py-2 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium';
+        checkboxes.forEach(cb => { cb.classList.remove('hidden'); cb.checked = false; });
+    } else {
+        btn.textContent = '비교';
+        btn.className = 'px-4 py-2 text-sm bg-emerald-100 text-emerald-700 rounded-lg hover:bg-emerald-200 font-medium';
+        checkboxes.forEach(cb => cb.classList.add('hidden'));
+        closeComparePanel();
+    }
+}
+
+function onCompareSelect(draftId) {
+    const cb = document.getElementById(`compare-cb-${draftId}`);
+    if (cb.checked) {
+        if (compareSelected.length >= 2) {
+            // Uncheck the oldest selection
+            const oldId = compareSelected.shift();
+            document.getElementById(`compare-cb-${oldId}`).checked = false;
+        }
+        compareSelected.push(draftId);
+    } else {
+        compareSelected = compareSelected.filter(id => id !== draftId);
+    }
+
+    if (compareSelected.length === 2) {
+        renderComparePanel(compareSelected[0], compareSelected[1]);
+    } else {
+        closeComparePanel();
+    }
+}
+
+function renderComparePanel(id1, id2) {
+    const panel = document.getElementById('compare-panel');
+    const container = document.getElementById('compare-content');
+
+    const d1 = allDrafts[id1];
+    const d2 = allDrafts[id2];
+    if (!d1 || !d2) return;
+
+    const content1 = document.getElementById(`draft-${id1}`)?.textContent || d1.content;
+    const content2 = document.getElementById(`draft-${id2}`)?.textContent || d2.content;
+
+    const len1 = content1.length;
+    const len2 = content2.length;
+    const maxLen = Math.max(len1, len2, 1);
+
+    const eval1 = draftEvaluations[id1];
+    const eval2 = draftEvaluations[id2];
+
+    function getHook(text) {
+        const lines = text.split('\n');
+        return lines[0] || '';
+    }
+
+    function getScoreColor(s) {
+        if (s >= 80) return 'bg-green-100 text-green-700';
+        if (s >= 60) return 'bg-yellow-100 text-yellow-700';
+        return 'bg-red-100 text-red-700';
+    }
+
+    function getCharClass(len) {
+        if (len > 3000) return 'bg-red-500';
+        if (len > 2000) return 'bg-yellow-500';
+        return 'bg-green-500';
+    }
+
+    function getScenarioName(sc) {
+        return scenarios[sc] ? `${sc}: ${scenarios[sc].name}` : (sc || '-');
+    }
+
+    function renderSide(draft, content, evalData, charLen) {
+        const hook = getHook(content);
+        const scoreBadge = evalData && evalData.overall_score != null
+            ? `<span class="px-2 py-0.5 text-xs font-bold rounded ${getScoreColor(evalData.overall_score)}">${evalData.overall_score}점</span>`
+            : '<span class="text-xs text-gray-400">평가 없음</span>';
+        const barPct = Math.round((charLen / maxLen) * 100);
+        const isFinal = draft.status === 'final';
+
+        return `
+            <div class="compare-card ${isFinal ? 'selected-final' : ''}">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-2">
+                        <span class="px-2 py-0.5 text-xs font-medium bg-purple-100 text-purple-800 rounded">${getScenarioName(draft.scenario)}</span>
+                        <span class="text-xs text-gray-500">v${draft.version}</span>
+                        ${draft.generation_mode === 'agent' ? '<span class="px-1.5 py-0.5 text-xs bg-purple-50 text-purple-600 rounded">Agent</span>' : ''}
+                        ${isFinal ? '<span class="px-1.5 py-0.5 text-xs bg-green-100 text-green-700 rounded font-medium">Final</span>' : ''}
+                    </div>
+                    ${scoreBadge}
+                </div>
+                <div class="compare-hook mb-3">${escapeHtml(hook)}</div>
+                <div class="text-sm text-gray-600 whitespace-pre-wrap max-h-40 overflow-y-auto mb-3">${escapeHtml(content.substring(hook.length).trim())}</div>
+                <div class="mb-3">
+                    <div class="flex items-center justify-between text-xs text-gray-500 mb-1">
+                        <span>글자수</span>
+                        <span class="font-medium ${charLen > 3000 ? 'text-red-600' : charLen > 2000 ? 'text-yellow-600' : 'text-green-600'}">${charLen}자</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div class="compare-bar ${getCharClass(charLen)}" style="width: ${barPct}%"></div>
+                    </div>
+                </div>
+                ${!isFinal ? `<button onclick="finalizeFromCompare(${draft.id})" class="w-full py-2 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700">이 버전 사용</button>` : '<div class="text-center text-sm text-green-600 font-medium py-2">선택된 버전</div>'}
+            </div>
+        `;
+    }
+
+    container.innerHTML = renderSide(d1, content1, eval1, len1) + renderSide(d2, content2, eval2, len2);
+    panel.classList.remove('hidden');
+    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function closeComparePanel() {
+    document.getElementById('compare-panel').classList.add('hidden');
+}
+
+async function finalizeFromCompare(draftId) {
+    try {
+        const resp = await fetch(`/api/linkedin/drafts/${draftId}/finalize`, { method: 'POST' });
+        if (resp.ok) {
+            showToast('이 버전으로 확정!', 'success');
+            setTimeout(() => location.reload(), 500);
+        } else {
+            showToast('확정 실패', 'error');
+        }
+    } catch (e) {
+        showToast('오류 발생', 'error');
     }
 }
 
@@ -1943,6 +2162,12 @@ document.addEventListener('keydown', function(e) {
             e.preventDefault();
             if (!document.getElementById('hook-lab-btn').disabled) {
                 startHookLab();
+            }
+            break;
+        case 'c':
+            e.preventDefault();
+            if (document.getElementById('compare-btn')) {
+                toggleCompareMode();
             }
             break;
     }
