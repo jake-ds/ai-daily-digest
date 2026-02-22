@@ -458,6 +458,8 @@
                 </div>
                 <div class="p-4">
                     <div id="chat-messages" class="space-y-3 mb-4 max-h-80 overflow-y-auto"></div>
+                    <!-- Quick Refine Palette -->
+                    <div class="flex flex-wrap gap-1.5 mb-2" id="agent-quick-refine"></div>
                     <div class="flex gap-2">
                         <input type="text" id="chat-input"
                             class="flex-1 text-sm border rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-300 focus:border-purple-400"
@@ -556,6 +558,8 @@
                     </div>
                     <div class="p-3">
                         <div id="draft-chat-messages-{{ draft.id }}" class="space-y-2 mb-3 max-h-60 overflow-y-auto"></div>
+                        <!-- Quick Refine Palette -->
+                        <div class="flex flex-wrap gap-1.5 mb-2" id="draft-quick-refine-{{ draft.id }}"></div>
                         <div class="flex gap-2">
                             <input type="text" id="draft-chat-input-{{ draft.id }}"
                                 class="flex-1 text-sm border rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-300 focus:border-purple-400"
@@ -1181,6 +1185,38 @@ document.body.addEventListener('htmx:afterSwap', function(evt) {
     }
 });
 
+// --- Quick Refine Prompts ---
+
+const QUICK_REFINE_PROMPTS = [
+    { label: '훅 강화', prompt: '첫 줄(훅)을 더 강렬하고 호기심을 유발하도록 수정해줘. 숫자, 질문, 역설 등 강한 훅 기법을 사용해.' },
+    { label: '본문 축약', prompt: '본문을 더 간결하게 축약해줘. 핵심 메시지는 유지하되 불필요한 문장과 반복을 제거해.' },
+    { label: '톤 부드럽게', prompt: '전체적인 톤을 부드럽고 친근하게 바꿔줘. 딱딱한 표현을 대화하는 듯한 자연스러운 문체로 수정해.' },
+    { label: '데이터 추가', prompt: '설득력을 높이기 위해 구체적인 수치, 통계, 연구 결과 등 데이터 포인트를 추가해줘.' },
+    { label: '마무리 교체', prompt: '마지막 문단(마무리/CTA)을 새로운 방식으로 교체해줘. 독자의 행동을 유도하거나 생각할 거리를 남기는 마무리로.' },
+];
+
+function sendQuickRefine(promptText, targetType, targetId) {
+    if (targetType === 'agent') {
+        const input = document.getElementById('chat-input');
+        input.value = promptText;
+        sendChatMessage();
+    } else if (targetType === 'draft') {
+        const input = document.getElementById(`draft-chat-input-${targetId}`);
+        input.value = promptText;
+        sendDraftChat(targetId);
+    }
+}
+
+function renderQuickRefineButtons(containerId, targetType, targetId) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.innerHTML = QUICK_REFINE_PROMPTS.map(qr =>
+        `<button onclick="sendQuickRefine(\`${qr.prompt}\`, '${targetType}'${targetId !== undefined ? `, ${targetId}` : ''})"
+                title="${qr.prompt}"
+                class="px-2.5 py-1 text-xs bg-gray-100 text-gray-600 rounded-full hover:bg-purple-100 hover:text-purple-700 transition">${qr.label}</button>`
+    ).join('');
+}
+
 // --- Chat ---
 
 async function sendChatMessage() {
@@ -1504,13 +1540,19 @@ function updateDraftCharBadge(draftId, charCount) {
     }
 }
 
-// Initialize char count badges on page load
+// Initialize char count badges and quick refine buttons on page load
 document.addEventListener('DOMContentLoaded', function() {
     {% for draft in drafts %}
     (function() {
         const el = document.getElementById('draft-{{ draft.id }}');
         if (el) updateDraftCharBadge({{ draft.id }}, el.textContent.length);
     })();
+    {% endfor %}
+
+    // Render quick refine buttons
+    renderQuickRefineButtons('agent-quick-refine', 'agent');
+    {% for draft in drafts %}
+    renderQuickRefineButtons('draft-quick-refine-{{ draft.id }}', 'draft', {{ draft.id }});
     {% endfor %}
 });
 
