@@ -116,3 +116,20 @@ Started: 2026년 2월 22일 일요일 11시 40분 59초 KST
   - Lazy rendering with dataset.rendered flag prevents repeated DOM updates on toggle
   - No Python changes needed — purely frontend CSS/JS/HTML work
 ---
+
+## 2026-02-22 - V5-002
+- What was implemented: Quick Refine palette — 5 one-click refinement buttons above chat inputs
+- Files changed:
+  - web/templates/articles/detail.html — QUICK_REFINE_PROMPTS constant, sendQuickRefine() + renderQuickRefineButtons() JS functions, button containers in agent result panel chat and draft chat panels
+- Features added:
+  - 5 quick refine buttons: 훅 강화 / 본문 축약 / 톤 부드럽게 / 데이터 추가 / 마무리 교체
+  - Buttons rendered as Tailwind pill-style (rounded-full, gray → purple on hover)
+  - Each button has title attribute showing full prompt text on hover
+  - Works in both agent result panel chat (sendChatMessage) and per-draft chat (sendDraftChat)
+  - Buttons populated via renderQuickRefineButtons() on DOMContentLoaded
+- **Learnings for future iterations:**
+  - Avoid document.write() in templates — use DOMContentLoaded + innerHTML pattern instead
+  - Template backtick strings in JS work well for prompt text (no escaping issues)
+  - Quick refine uses same sendQuickRefine() function for both agent and draft targets, differentiated by targetType param
+  - No Python changes needed — purely frontend JS/HTML work
+---

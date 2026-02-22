@@ -32,7 +32,7 @@
         "버튼은 Tailwind 스타일의 작은 pill 형태, 호버 시 프롬프트 미리보기(title 속성)"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "notes": "순수 프론트엔드 작업. 기존 sendDraftChat()/sendChatMessage() 재활용. 프롬프트 텍스트는 JS 상수로 정의. Agent 결과 패널의 채팅 영역에도 동일 팔레트 추가."
     },
     {
