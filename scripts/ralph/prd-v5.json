@@ -17,7 +17,7 @@
         "Simple 모드 드래프트도 evaluation 값이 있으면 스코어카드 표시"
       ],
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "notes": "순수 프론트엔드 작업. evaluation JSON은 이미 DB에 저장됨 (V4-005에서 Simple 모드도 저장). Jinja2 템플릿에서 draft.evaluation을 JSON 파싱하여 JS로 전달. 기존 드래프트 카드 패턴(토글 패널) 활용."
     },
     {
