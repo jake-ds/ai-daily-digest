@@ -148,3 +148,17 @@ Started: 2026년 2월 22일 일요일 11시 40분 59초 KST
   - Alternative scenario section uses same selectScenario() JS function for seamless switching
   - Color coding for confidence: green ≥80%, yellow ≥60%, red <60%
 ---
+
+## 2026-02-22 - V5-004
+- What was implemented: Reference post scenario tagging UI — scenario badges, dropdown changer, filter buttons, scenario field on creation
+- Files changed:
+  - web/api/settings.py — added ReferencePostScenarioUpdate model, scenario field to ReferencePostCreate, PATCH /reference-posts/{id}/scenario endpoint, scenario query filter on GET /reference-posts
+  - web/templates/settings/guidelines.html — scenario filter buttons, scenario badge with dropdown on each ref card, scenario select on creation form, SCENARIO_STYLES JS constant, toggleScenarioDropdown/updateScenario/filterByScenario JS functions
+- **Learnings for future iterations:**
+  - ReferencePost.scenario column already existed from V4-002 — only needed API + UI work
+  - save_reference_post() in GuidelinesLearner already accepted scenario param, auto-detects from analysis if not provided
+  - Scenario color scheme: A=blue, B=green, C=purple, D=orange, E=rose, F=teal, unset=gray
+  - Filter buttons use data-scenario attribute on ref-card divs for client-side filtering
+  - Dropdown pattern: toggle on badge click + document click listener to close all dropdowns
+  - event.stopPropagation() on badge button prevents document click from immediately closing dropdown
+---

@@ -62,7 +62,7 @@
         "배지 클릭 시 드롭다운으로 시나리오 변경 가능"
       ],
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "notes": "백엔드: ReferencePost.scenario는 V4-002에서 이미 추가됨. API만 확장. 프론트엔드: settings/guidelines.html에서 참고 포스트 UI 수정. 시나리오 색상은 기존 시나리오 라디오 버튼의 Tailwind 색상 패턴 재활용."
     },
     {
