@@ -133,3 +133,18 @@ Started: 2026년 2월 22일 일요일 11시 40분 59초 KST
   - Quick refine uses same sendQuickRefine() function for both agent and draft targets, differentiated by targetType param
   - No Python changes needed — purely frontend JS/HTML work
 ---
+
+## 2026-02-22 - V5-003
+- What was implemented: Scenario confidence display + alternative scenario recommendation
+- Files changed:
+  - web/services/linkedin_service.py — modified _detect_scenario_with_claude() to return top-2 scenarios, added detect_scenario_with_alternatives() method
+  - web/api/linkedin.py — added GET /api/linkedin/scenario/{article_id} endpoint
+  - web/app.py — pass scenario_alternatives to template context
+  - web/templates/articles/detail.html — confidence % badge on recommended scenario box + scenario buttons, alternative scenario section when confidence < 0.75
+- **Learnings for future iterations:**
+  - _detect_scenario_with_claude() now returns "alternatives" key with top-2 scenario data — cached in _scenario_cache
+  - scenario_confidence is already passed to template from app.py (was unused before V5-003)
+  - Jinja2 {% set conf_pct = (scenario_confidence * 100) | int %} for percentage conversion
+  - Alternative scenario section uses same selectScenario() JS function for seamless switching
+  - Color coding for confidence: green ≥80%, yellow ≥60%, red <60%
+---

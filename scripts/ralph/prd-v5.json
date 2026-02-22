@@ -47,7 +47,7 @@
         "confidence ≥ 0.75이면 대안 섹션 숨김"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "notes": "백엔드: detect_scenario_detailed()가 이미 confidence를 반환함. 이를 확장하여 top-2 시나리오 반환. 프론트엔드: 시나리오 라디오 버튼 영역에 배지 추가. 기존 detect_scenario_with_claude()를 수정하여 top-2 반환하도록."
     },
     {
