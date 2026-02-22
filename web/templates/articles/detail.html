@@ -361,9 +361,18 @@
                         {% endif %}
                     </div>
                     <div class="flex items-center space-x-2">
+                        <span class="text-xs" id="draft-char-badge-{{ draft.id }}"></span>
                         <button onclick="copyToClipboard(document.getElementById('draft-{{ draft.id }}').innerText)"
                                 class="px-3 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300">
                             Copy
+                        </button>
+                        <button onclick="startDraftEdit({{ draft.id }})"
+                                class="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200">
+                            편집
+                        </button>
+                        <button onclick="toggleDraftChat({{ draft.id }})"
+                                class="px-3 py-1 text-xs bg-purple-100 text-purple-700 rounded hover:bg-purple-200">
+                            채팅
                         </button>
                         {% if draft.status == 'draft' %}
                         <button onclick="finalizeDraft({{ draft.id }})"
@@ -382,6 +391,46 @@
                     </div>
                 </div>
                 <div id="draft-{{ draft.id }}" class="prose prose-sm max-w-none whitespace-pre-wrap text-gray-800">{{ draft.draft_content }}</div>
+
+                <!-- Inline Edit Panel (hidden by default) -->
+                <div id="draft-edit-{{ draft.id }}" class="hidden mt-3">
+                    <textarea id="draft-edit-textarea-{{ draft.id }}" rows="15"
+                        class="w-full text-sm border rounded-lg p-3 focus:ring-2 focus:ring-blue-300 focus:border-blue-400"
+                        oninput="updateDraftEditCharCount({{ draft.id }})"></textarea>
+                    <div class="flex items-center justify-between mt-2">
+                        <span id="draft-edit-counter-{{ draft.id }}" class="text-sm font-medium"></span>
+                        <div class="flex gap-2">
+                            <button onclick="cancelDraftEdit({{ draft.id }})"
+                                    class="px-4 py-1.5 bg-gray-200 text-gray-700 text-sm rounded hover:bg-gray-300">
+                                취소
+                            </button>
+                            <button onclick="saveDraftEdit({{ draft.id }})"
+                                    class="px-4 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700">
+                                저장
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Draft Chat Panel (hidden by default) -->
+                <div id="draft-chat-{{ draft.id }}" class="hidden mt-3 border rounded-lg overflow-hidden">
+                    <div class="bg-purple-50 px-4 py-2 border-b">
+                        <span class="text-purple-700 text-sm font-semibold">채팅으로 개선</span>
+                    </div>
+                    <div class="p-3">
+                        <div id="draft-chat-messages-{{ draft.id }}" class="space-y-2 mb-3 max-h-60 overflow-y-auto"></div>
+                        <div class="flex gap-2">
+                            <input type="text" id="draft-chat-input-{{ draft.id }}"
+                                class="flex-1 text-sm border rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-300 focus:border-purple-400"
+                                placeholder="수정 요청을 입력하세요..."
+                                onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault();sendDraftChat({{ draft.id }})}">
+                            <button onclick="sendDraftChat({{ draft.id }})" id="draft-chat-send-{{ draft.id }}"
+                                    class="px-4 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 disabled:opacity-50">
+                                전송
+                            </button>
+                        </div>
+                    </div>
+                </div>
 
                 {% if draft.evaluation %}
                 <div class="mt-3 pt-3 border-t">
@@ -423,6 +472,14 @@ const draftEvaluations = {};
 {% for draft in drafts %}
 {% if draft.evaluation %}
 try { draftEvaluations[{{ draft.id }}] = JSON.parse({{ draft.evaluation | tojson }}); } catch(e) {}
+{% endif %}
+{% endfor %}
+
+// Chat history from existing drafts
+const draftChatHistories = {};
+{% for draft in drafts %}
+{% if draft.chat_history %}
+try { draftChatHistories[{{ draft.id }}] = JSON.parse({{ draft.chat_history | tojson }}); } catch(e) {}
 {% endif %}
 {% endfor %}
 
@@ -915,7 +972,8 @@ document.body.addEventListener('htmx:afterSwap', function(evt) {
 // --- Chat ---
 
 async function sendChatMessage() {
-    if (!agentSessionId) return;
+    // Fall back to draft-based chat if no session (e.g., after page refresh)
+    if (!agentSessionId && !agentDraftId) return;
 
     const input = document.getElementById('chat-input');
     const msg = input.value.trim();
@@ -934,8 +992,13 @@ async function sendChatMessage() {
     messagesEl.insertAdjacentHTML('beforeend', `<div id="${loadingId}" class="flex"><div class="chat-msg-assistant px-3 py-2 text-sm text-gray-500">수정 중...</div></div>`);
     messagesEl.scrollTop = messagesEl.scrollHeight;
 
+    // Choose endpoint: session-based if session exists, draft-based as fallback
+    const chatUrl = agentSessionId
+        ? `/api/linkedin/agent/${agentSessionId}/chat`
+        : `/api/linkedin/drafts/${agentDraftId}/chat`;
+
     try {
-        const resp = await fetch(`/api/linkedin/agent/${agentSessionId}/chat`, {
+        const resp = await fetch(chatUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ message: msg }),
@@ -947,9 +1010,20 @@ async function sendChatMessage() {
         if (resp.ok) {
             appendChatMessage('assistant', `수정 완료 (${data.char_count}자)`);
             // Update draft display
-            document.getElementById('agent-final-draft').textContent = data.revised_draft;
+            const revised = data.revised_draft || data.updated_content;
+            document.getElementById('agent-final-draft').textContent = revised;
             document.getElementById('agent-draft-char-count').textContent = `${data.char_count}자`;
         } else {
+            // If session expired, switch to draft-based and retry
+            if (resp.status === 404 && agentSessionId && agentDraftId) {
+                agentSessionId = null;
+                document.getElementById(loadingId)?.remove();
+                // Re-add user message input and retry
+                input.value = msg;
+                sendBtn.disabled = false;
+                appendChatMessage('assistant', '세션이 만료되어 draft 기반 채팅으로 전환합니다. 다시 전송해주세요.');
+                return;
+            }
             appendChatMessage('assistant', `오류: ${data.detail || '알 수 없는 오류'}`);
         }
     } catch (e) {
@@ -1066,6 +1140,167 @@ function escapeHtml(text) {
     div.textContent = text;
     return div.innerHTML;
 }
+
+// --- Draft-based Chat ---
+
+function toggleDraftChat(draftId) {
+    const panel = document.getElementById(`draft-chat-${draftId}`);
+    if (panel.classList.contains('hidden')) {
+        panel.classList.remove('hidden');
+        // Load existing chat history if not already rendered
+        const messagesEl = document.getElementById(`draft-chat-messages-${draftId}`);
+        if (messagesEl.children.length === 0 && draftChatHistories[draftId]) {
+            draftChatHistories[draftId].forEach(msg => {
+                appendDraftChatMessage(draftId, msg.role, msg.content);
+            });
+        }
+        document.getElementById(`draft-chat-input-${draftId}`).focus();
+    } else {
+        panel.classList.add('hidden');
+    }
+}
+
+async function sendDraftChat(draftId) {
+    const input = document.getElementById(`draft-chat-input-${draftId}`);
+    const msg = input.value.trim();
+    if (!msg) return;
+
+    const sendBtn = document.getElementById(`draft-chat-send-${draftId}`);
+    sendBtn.disabled = true;
+    input.value = '';
+
+    appendDraftChatMessage(draftId, 'user', msg);
+
+    // Loading indicator
+    const loadingId = `draft-chat-loading-${Date.now()}`;
+    const messagesEl = document.getElementById(`draft-chat-messages-${draftId}`);
+    messagesEl.insertAdjacentHTML('beforeend',
+        `<div id="${loadingId}" class="flex"><div class="chat-msg-assistant px-3 py-2 text-sm text-gray-500">수정 중...</div></div>`);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+
+    try {
+        const resp = await fetch(`/api/linkedin/drafts/${draftId}/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: msg }),
+        });
+
+        const data = await resp.json();
+        document.getElementById(loadingId)?.remove();
+
+        if (resp.ok) {
+            appendDraftChatMessage(draftId, 'assistant', `수정 완료 (${data.char_count}자)`);
+            // Update draft text and char count badge
+            document.getElementById(`draft-${draftId}`).textContent = data.updated_content;
+            updateDraftCharBadge(draftId, data.char_count);
+        } else {
+            appendDraftChatMessage(draftId, 'assistant', `오류: ${data.detail || '알 수 없는 오류'}`);
+        }
+    } catch (e) {
+        document.getElementById(loadingId)?.remove();
+        appendDraftChatMessage(draftId, 'assistant', `오류: ${e.message}`);
+    }
+
+    sendBtn.disabled = false;
+    input.focus();
+}
+
+function appendDraftChatMessage(draftId, role, content) {
+    const messagesEl = document.getElementById(`draft-chat-messages-${draftId}`);
+    const cssClass = role === 'user' ? 'chat-msg-user' : 'chat-msg-assistant';
+    const align = role === 'user' ? 'justify-end' : 'justify-start';
+    messagesEl.insertAdjacentHTML('beforeend',
+        `<div class="flex ${align}"><div class="${cssClass} px-3 py-2 text-sm">${escapeHtml(content)}</div></div>`
+    );
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+// --- Draft Inline Edit ---
+
+function startDraftEdit(draftId) {
+    const editPanel = document.getElementById(`draft-edit-${draftId}`);
+    const textarea = document.getElementById(`draft-edit-textarea-${draftId}`);
+    const draftContent = document.getElementById(`draft-${draftId}`).textContent;
+
+    if (editPanel.classList.contains('hidden')) {
+        textarea.value = draftContent;
+        editPanel.classList.remove('hidden');
+        updateDraftEditCharCount(draftId);
+        textarea.focus();
+    } else {
+        editPanel.classList.add('hidden');
+    }
+}
+
+function cancelDraftEdit(draftId) {
+    document.getElementById(`draft-edit-${draftId}`).classList.add('hidden');
+}
+
+async function saveDraftEdit(draftId) {
+    const content = document.getElementById(`draft-edit-textarea-${draftId}`).value;
+
+    try {
+        const resp = await fetch(`/api/linkedin/drafts/${draftId}/content`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: content }),
+        });
+
+        if (resp.ok) {
+            const data = await resp.json();
+            document.getElementById(`draft-${draftId}`).textContent = content;
+            updateDraftCharBadge(draftId, data.char_count);
+            document.getElementById(`draft-edit-${draftId}`).classList.add('hidden');
+            showToast('저장 완료', 'success');
+        } else {
+            showToast('저장 실패', 'error');
+        }
+    } catch (e) {
+        showToast('저장 오류', 'error');
+    }
+}
+
+function updateDraftEditCharCount(draftId) {
+    const textarea = document.getElementById(`draft-edit-textarea-${draftId}`);
+    const counter = document.getElementById(`draft-edit-counter-${draftId}`);
+    const len = textarea.value.length;
+    counter.innerHTML = `<span class="${getCharCountClass(len)}">${len}자 (${getCharCountLabel(len)})</span>`;
+}
+
+// --- Char Count Helpers ---
+
+function getCharCountClass(len) {
+    if (len < 1200) return 'char-danger';
+    if (len < 1400) return 'char-warning';
+    if (len <= 1600) return 'char-ideal';
+    if (len <= 1800) return 'char-warning';
+    return 'char-danger';
+}
+
+function getCharCountLabel(len) {
+    if (len < 1200) return '너무 짧음';
+    if (len < 1400) return '짧음';
+    if (len <= 1600) return '이상적 범위';
+    if (len <= 1800) return '약간 김';
+    return '너무 김';
+}
+
+function updateDraftCharBadge(draftId, charCount) {
+    const badge = document.getElementById(`draft-char-badge-${draftId}`);
+    if (badge) {
+        badge.innerHTML = `<span class="${getCharCountClass(charCount)}">${charCount}자</span>`;
+    }
+}
+
+// Initialize char count badges on page load
+document.addEventListener('DOMContentLoaded', function() {
+    {% for draft in drafts %}
+    (function() {
+        const el = document.getElementById('draft-{{ draft.id }}');
+        if (el) updateDraftCharBadge({{ draft.id }}, el.textContent.length);
+    })();
+    {% endfor %}
+});
 
 // Keyboard shortcuts for article detail page
 document.addEventListener('keydown', function(e) {
