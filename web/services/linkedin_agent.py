@@ -88,19 +88,152 @@ class LinkedInAgent:
         except FileNotFoundError:
             return ""
 
+    def _extract_scenario_guidelines(self, scenario: str, guidelines: str) -> str:
+        """Extract common rules + specific scenario section from guidelines."""
+        if not guidelines:
+            return ""
+
+        sections = []
+
+        # 1. Persona section
+        persona_match = re.search(
+            r'## Persona\n(.*?)(?=\n---)',
+            guidelines, re.DOTALL,
+        )
+        if persona_match:
+            sections.append(f"## 페르소나\n{persona_match.group(1).strip()}")
+
+        # 2. Specific scenario guide
+        scenario_pattern = rf'### 시나리오 {scenario}:.*?(?=\n---|\n### 시나리오 [A-F]:|$)'
+        scenario_match = re.search(scenario_pattern, guidelines, re.DOTALL)
+        if scenario_match:
+            sections.append(scenario_match.group(0).strip())
+
+        # 3. Common rules
+        common_match = re.search(
+            r'## 공통 규칙\n(.*?)(?=\n## |$)',
+            guidelines, re.DOTALL,
+        )
+        if common_match:
+            sections.append(f"## 공통 규칙\n{common_match.group(1).strip()}")
+
+        # 4. Specific scenario example
+        example_pattern = rf'### 시나리오 {scenario} 예시.*?```\n(.*?)```'
+        example_match = re.search(example_pattern, guidelines, re.DOTALL)
+        if example_match:
+            sections.append(f"## 이 시나리오의 예시\n```\n{example_match.group(1).strip()}\n```")
+
+        return "\n\n".join(sections)
+
+    def _extract_persona(self, guidelines: str) -> str:
+        """Extract persona section from guidelines."""
+        if not guidelines:
+            return ""
+
+        persona_match = re.search(
+            r'## Persona\n(.*?)(?=\n---)',
+            guidelines, re.DOTALL,
+        )
+        if persona_match:
+            return persona_match.group(1).strip()
+
+        return ""
+
+    def _get_past_learnings(self, limit: int = 5) -> str:
+        """Extract learnings from past drafts (FAIL patterns, user feedback)."""
+        try:
+            from web.models import LinkedInDraft as LD
+            past_drafts = (
+                self.db.query(LD)
+                .filter(LD.evaluation.isnot(None))
+                .order_by(LD.created_at.desc())
+                .limit(limit)
+                .all()
+            )
+
+            if not past_drafts:
+                return ""
+
+            fail_patterns = []
+            user_corrections = []
+
+            for draft in past_drafts:
+                if draft.evaluation:
+                    try:
+                        eval_data = json.loads(draft.evaluation)
+                        for item in eval_data.get("items", []):
+                            if not item.get("pass", True):
+                                fail_msg = f"[{item.get('category', '')}] {item.get('rule', '')}"
+                                if fail_msg not in fail_patterns:
+                                    fail_patterns.append(fail_msg)
+                    except (json.JSONDecodeError, KeyError):
+                        pass
+
+                if draft.user_feedback and draft.user_feedback.strip():
+                    user_corrections.append(draft.user_feedback.strip()[:100])
+
+                if draft.chat_history:
+                    try:
+                        chats = json.loads(draft.chat_history)
+                        for msg in chats:
+                            if msg.get("role") == "user":
+                                user_corrections.append(msg["content"][:100])
+                    except (json.JSONDecodeError, KeyError):
+                        pass
+
+            if not fail_patterns and not user_corrections:
+                return ""
+
+            result_parts = []
+            if fail_patterns:
+                result_parts.append("## 반복 실수 방지 (이전 드래프트에서 FAIL된 항목)")
+                for p in fail_patterns[:5]:
+                    result_parts.append(f"- {p}")
+
+            if user_corrections:
+                result_parts.append("\n## 사용자 수정 이력 (이전 피드백)")
+                for c in user_corrections[:3]:
+                    result_parts.append(f"- {c}")
+
+            result = "\n".join(result_parts)
+            if len(result) > 500:
+                result = result[:497] + "..."
+
+            return result
+
+        except Exception:
+            return ""
+
     def _get_reference_examples(self, scenario: str, guidelines: str) -> str:
-        """Get reference post examples for the given scenario."""
+        """Get reference post examples for the given scenario (scenario-filtered)."""
         examples = []
 
-        # DB에서 ReferencePost 최대 2개
+        # 같은 시나리오 ReferencePost 우선 2개
         ref_posts = (
             self.db.query(ReferencePost)
+            .filter(ReferencePost.scenario == scenario)
             .order_by(ReferencePost.created_at.desc())
             .limit(2)
             .all()
         )
         for post in ref_posts:
             examples.append(post.content)
+
+        # 부족하면 다른 시나리오에서 fallback
+        if len(examples) < 2:
+            remaining = 2 - len(examples)
+            existing_ids = [p.id for p in ref_posts]
+            query = self.db.query(ReferencePost)
+            if existing_ids:
+                query = query.filter(ReferencePost.id.notin_(existing_ids))
+            fallback_posts = (
+                query
+                .order_by(ReferencePost.created_at.desc())
+                .limit(remaining)
+                .all()
+            )
+            for post in fallback_posts:
+                examples.append(post.content)
 
         # 지침서에서 해당 시나리오 예시 추출
         if guidelines:
@@ -371,7 +504,11 @@ class LinkedInAgent:
         # 매번 파일에서 새로 로드 (hot-reload)
         guidelines = self._load_guidelines() or guidelines
 
-        guidelines_text = guidelines if guidelines else "지침서가 설정되지 않았습니다. 기본 규칙을 적용합니다."
+        # 시나리오별 필터링된 지침서 사용
+        scenario_guidelines = self._extract_scenario_guidelines(session.scenario, guidelines)
+        guidelines_text = scenario_guidelines if scenario_guidelines else (
+            guidelines if guidelines else "지침서가 설정되지 않았습니다. 기본 규칙을 적용합니다."
+        )
 
         prompt = f"""LinkedIn 포스팅 지침서를 검토하고, 이번 포스팅에 적용할 규칙 체크리스트를 만들어주세요.
 
@@ -409,6 +546,19 @@ class LinkedInAgent:
         reference_section = self._get_reference_examples(session.scenario, guidelines)
         session.reference_examples = reference_section
 
+        # 페르소나 추출
+        persona = self._extract_persona(guidelines)
+        if not persona:
+            persona = "- VC 심사역 + ML 엔지니어 출신 AI 빌더\n- 최신 AI 기술과 시장 동향에 깊은 이해"
+
+        # 이전 드래프트 학습
+        past_learnings = self._get_past_learnings()
+        learnings_section = ""
+        if past_learnings:
+            learnings_section = f"""
+{past_learnings}
+"""
+
         # 훅 섹션 (사전 선택된 훅이 있는 경우)
         hook_section = ""
         if session.hook:
@@ -440,9 +590,8 @@ class LinkedInAgent:
 {self._build_article_context(article)}
 
 ## 페르소나
-- VC 심사역 + ML 엔지니어 출신 AI 빌더
-- 최신 AI 기술과 시장 동향에 깊은 이해
-{reference_section}{hook_section}
+{persona}
+{reference_section}{hook_section}{learnings_section}
 ## LinkedIn 포맷팅 규칙
 - 줄바꿈으로 단락을 명확히 구분하세요
 - 짧은 문장을 사용하세요 (한 문장에 2줄 이상 금지)
@@ -562,7 +711,11 @@ class LinkedInAgent:
         yield self._sse("step_start", {"step": 5, "name": "가이드라인 평가"})
 
         final_draft = session.improved_draft or session.draft
-        guidelines_text = guidelines if guidelines else "기본 LinkedIn 포스팅 규칙"
+        # 시나리오별 필터링된 지침서 사용
+        scenario_guidelines = self._extract_scenario_guidelines(session.scenario, guidelines)
+        guidelines_text = scenario_guidelines if scenario_guidelines else (
+            guidelines if guidelines else "기본 LinkedIn 포스팅 규칙"
+        )
 
         prompt = f"""다음 LinkedIn 포스트를 지침 항목별로 평가해주세요.
 

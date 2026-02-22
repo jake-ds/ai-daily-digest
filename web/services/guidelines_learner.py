@@ -203,13 +203,23 @@ JSON만 출력하세요. 기존 지침과 충돌하는 제안은 하지 마세�
         author: Optional[str] = None,
         source_url: Optional[str] = None,
         analysis: Optional[dict] = None,
+        scenario: Optional[str] = None,
     ) -> ReferencePost:
-        """Save a reference post to the database."""
+        """Save a reference post to the database.
+
+        Args:
+            scenario: Scenario (A-F). Auto-detected from analysis if not provided.
+        """
+        # 시나리오 자동 감지: analysis에서 추출 또는 content 기반 추정
+        if not scenario and analysis:
+            scenario = analysis.get("scenario")
+
         post = ReferencePost(
             content=content,
             author=author,
             source_url=source_url,
             analysis=json.dumps(analysis, ensure_ascii=False) if analysis else None,
+            scenario=scenario,
         )
         self.db.add(post)
         self.db.commit()
