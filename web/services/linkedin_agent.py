@@ -49,6 +49,12 @@ class AgentSession:
     # asyncio.Event for user input synchronization
     input_event: asyncio.Event = field(default_factory=asyncio.Event)
     input_data: dict = field(default_factory=dict)
+    # 참고자료 및 채팅
+    guidelines_raw: str = ""
+    reference_examples: str = ""
+    chat_messages: list = field(default_factory=list)
+    draft_id: int = 0
+    hook: str = ""
 
 
 # Global session store
@@ -82,19 +88,152 @@ class LinkedInAgent:
         except FileNotFoundError:
             return ""
 
+    def _extract_scenario_guidelines(self, scenario: str, guidelines: str) -> str:
+        """Extract common rules + specific scenario section from guidelines."""
+        if not guidelines:
+            return ""
+
+        sections = []
+
+        # 1. Persona section
+        persona_match = re.search(
+            r'## Persona\n(.*?)(?=\n---)',
+            guidelines, re.DOTALL,
+        )
+        if persona_match:
+            sections.append(f"## 페르소나\n{persona_match.group(1).strip()}")
+
+        # 2. Specific scenario guide
+        scenario_pattern = rf'### 시나리오 {scenario}:.*?(?=\n---|\n### 시나리오 [A-F]:|$)'
+        scenario_match = re.search(scenario_pattern, guidelines, re.DOTALL)
+        if scenario_match:
+            sections.append(scenario_match.group(0).strip())
+
+        # 3. Common rules
+        common_match = re.search(
+            r'## 공통 규칙\n(.*?)(?=\n## |$)',
+            guidelines, re.DOTALL,
+        )
+        if common_match:
+            sections.append(f"## 공통 규칙\n{common_match.group(1).strip()}")
+
+        # 4. Specific scenario example
+        example_pattern = rf'### 시나리오 {scenario} 예시.*?```\n(.*?)```'
+        example_match = re.search(example_pattern, guidelines, re.DOTALL)
+        if example_match:
+            sections.append(f"## 이 시나리오의 예시\n```\n{example_match.group(1).strip()}\n```")
+
+        return "\n\n".join(sections)
+
+    def _extract_persona(self, guidelines: str) -> str:
+        """Extract persona section from guidelines."""
+        if not guidelines:
+            return ""
+
+        persona_match = re.search(
+            r'## Persona\n(.*?)(?=\n---)',
+            guidelines, re.DOTALL,
+        )
+        if persona_match:
+            return persona_match.group(1).strip()
+
+        return ""
+
+    def _get_past_learnings(self, limit: int = 5) -> str:
+        """Extract learnings from past drafts (FAIL patterns, user feedback)."""
+        try:
+            from web.models import LinkedInDraft as LD
+            past_drafts = (
+                self.db.query(LD)
+                .filter(LD.evaluation.isnot(None))
+                .order_by(LD.created_at.desc())
+                .limit(limit)
+                .all()
+            )
+
+            if not past_drafts:
+                return ""
+
+            fail_patterns = []
+            user_corrections = []
+
+            for draft in past_drafts:
+                if draft.evaluation:
+                    try:
+                        eval_data = json.loads(draft.evaluation)
+                        for item in eval_data.get("items", []):
+                            if not item.get("pass", True):
+                                fail_msg = f"[{item.get('category', '')}] {item.get('rule', '')}"
+                                if fail_msg not in fail_patterns:
+                                    fail_patterns.append(fail_msg)
+                    except (json.JSONDecodeError, KeyError):
+                        pass
+
+                if draft.user_feedback and draft.user_feedback.strip():
+                    user_corrections.append(draft.user_feedback.strip()[:100])
+
+                if draft.chat_history:
+                    try:
+                        chats = json.loads(draft.chat_history)
+                        for msg in chats:
+                            if msg.get("role") == "user":
+                                user_corrections.append(msg["content"][:100])
+                    except (json.JSONDecodeError, KeyError):
+                        pass
+
+            if not fail_patterns and not user_corrections:
+                return ""
+
+            result_parts = []
+            if fail_patterns:
+                result_parts.append("## 반복 실수 방지 (이전 드래프트에서 FAIL된 항목)")
+                for p in fail_patterns[:5]:
+                    result_parts.append(f"- {p}")
+
+            if user_corrections:
+                result_parts.append("\n## 사용자 수정 이력 (이전 피드백)")
+                for c in user_corrections[:3]:
+                    result_parts.append(f"- {c}")
+
+            result = "\n".join(result_parts)
+            if len(result) > 500:
+                result = result[:497] + "..."
+
+            return result
+
+        except Exception:
+            return ""
+
     def _get_reference_examples(self, scenario: str, guidelines: str) -> str:
-        """Get reference post examples for the given scenario."""
+        """Get reference post examples for the given scenario (scenario-filtered)."""
         examples = []
 
-        # DB에서 ReferencePost 최대 2개
+        # 같은 시나리오 ReferencePost 우선 2개
         ref_posts = (
             self.db.query(ReferencePost)
+            .filter(ReferencePost.scenario == scenario)
             .order_by(ReferencePost.created_at.desc())
             .limit(2)
             .all()
         )
         for post in ref_posts:
             examples.append(post.content)
+
+        # 부족하면 다른 시나리오에서 fallback
+        if len(examples) < 2:
+            remaining = 2 - len(examples)
+            existing_ids = [p.id for p in ref_posts]
+            query = self.db.query(ReferencePost)
+            if existing_ids:
+                query = query.filter(ReferencePost.id.notin_(existing_ids))
+            fallback_posts = (
+                query
+                .order_by(ReferencePost.created_at.desc())
+                .limit(remaining)
+                .all()
+            )
+            for post in fallback_posts:
+                examples.append(post.content)
 
         # 지침서에서 해당 시나리오 예시 추출
         if guidelines:
@@ -120,6 +259,7 @@ class LinkedInAgent:
         self,
         article_id: int,
         scenario: Optional[str] = None,
+        hook: Optional[str] = None,
     ) -> AsyncGenerator[str, None]:
         """
         Run the agent pipeline, yielding SSE events.
@@ -143,6 +283,7 @@ class LinkedInAgent:
             session_id=session_id,
             article_id=article_id,
             scenario=scenario,
+            hook=hook or "",
         )
         _sessions[session_id] = session
 
@@ -227,6 +368,7 @@ class LinkedInAgent:
 
             # Save to database
             draft_record = self._save_draft(session, article)
+            session.draft_id = draft_record.id
 
             session.status = "completed"
             yield self._sse("agent_complete", {
@@ -288,7 +430,10 @@ class LinkedInAgent:
 
         analysis = await self._call_claude_streaming(prompt, session, step=0)
         session.analysis = analysis
-        yield self._sse("step_complete", {"step": 0, "content": analysis})
+        yield self._sse("step_complete", {
+            "step": 0, "content": analysis,
+            "reference_data": {"article_context": article_context},
+        })
 
     async def _step_directions(self, session: AgentSession, article: Article, scenario_info: dict) -> AsyncGenerator[str, None]:
         """Step 1: Suggest 3 directions and wait for user choice."""
@@ -320,7 +465,16 @@ class LinkedInAgent:
 
         directions = await self._call_claude_streaming(prompt, session, step=1)
         session.directions = directions
-        yield self._sse("step_complete", {"step": 1, "content": directions})
+        yield self._sse("step_complete", {
+            "step": 1, "content": directions,
+            "reference_data": {
+                "scenario_info": {
+                    "hook_style": scenario_info.get("hook_style", ""),
+                    "structure": scenario_info.get("structure", ""),
+                    "closing": scenario_info.get("closing", ""),
+                },
+            },
+        })
 
         # Wait for user input
         session.status = "waiting"
@@ -350,7 +504,11 @@ class LinkedInAgent:
         # 매번 파일에서 새로 로드 (hot-reload)
         guidelines = self._load_guidelines() or guidelines
 
-        guidelines_text = guidelines if guidelines else "지침서가 설정되지 않았습니다. 기본 규칙을 적용합니다."
+        # 시나리오별 필터링된 지침서 사용
+        scenario_guidelines = self._extract_scenario_guidelines(session.scenario, guidelines)
+        guidelines_text = scenario_guidelines if scenario_guidelines else (
+            guidelines if guidelines else "지침서가 설정되지 않았습니다. 기본 규칙을 적용합니다."
+        )
 
         prompt = f"""LinkedIn 포스팅 지침서를 검토하고, 이번 포스팅에 적용할 규칙 체크리스트를 만들어주세요.
 
@@ -374,7 +532,11 @@ class LinkedInAgent:
 
         checklist = await self._call_claude_streaming(prompt, session, step=2)
         session.guidelines_checklist = checklist
-        yield self._sse("step_complete", {"step": 2, "content": checklist})
+        session.guidelines_raw = guidelines_text
+        yield self._sse("step_complete", {
+            "step": 2, "content": checklist,
+            "reference_data": {"guidelines_text": guidelines_text},
+        })
 
     async def _step_draft(self, session: AgentSession, article: Article, scenario_info: dict, guidelines: str) -> AsyncGenerator[str, None]:
         """Step 3: Write the draft."""
@@ -382,6 +544,32 @@ class LinkedInAgent:
         yield self._sse("step_start", {"step": 3, "name": "초안 작성"})
 
         reference_section = self._get_reference_examples(session.scenario, guidelines)
+        session.reference_examples = reference_section
+
+        # 페르소나 추출
+        persona = self._extract_persona(guidelines)
+        if not persona:
+            persona = "- VC 심사역 + ML 엔지니어 출신 AI 빌더\n- 최신 AI 기술과 시장 동향에 깊은 이해"
+
+        # 이전 드래프트 학습
+        past_learnings = self._get_past_learnings()
+        learnings_section = ""
+        if past_learnings:
+            learnings_section = f"""
+{past_learnings}
+"""
+
+        # 훅 섹션 (사전 선택된 훅이 있는 경우)
+        hook_section = ""
+        if session.hook:
+            hook_section = f"""
+## 사용할 훅 (반드시 이 훅으로 시작)
+다음 훅이 사전에 선택되었습니다. 포스트의 첫 부분을 반드시 이 훅으로 시작하세요:
+
+{session.hook}
+
+이 훅을 그대로 사용하되, 문맥에 맞게 미세 조정은 허용됩니다. 의미나 구조를 변경하지 마세요.
+"""
 
         prompt = f"""다음 정보를 바탕으로 LinkedIn 포스트 초안을 작성해주세요.
 
@@ -402,9 +590,8 @@ class LinkedInAgent:
 {self._build_article_context(article)}
 
 ## 페르소나
-- VC 심사역 + ML 엔지니어 출신 AI 빌더
-- 최신 AI 기술과 시장 동향에 깊은 이해
-{reference_section}
+{persona}
+{reference_section}{hook_section}{learnings_section}
 ## LinkedIn 포맷팅 규칙
 - 줄바꿈으로 단락을 명확히 구분하세요
 - 짧은 문장을 사용하세요 (한 문장에 2줄 이상 금지)
@@ -428,7 +615,10 @@ class LinkedInAgent:
 
         draft = await self._call_claude_streaming(prompt, session, step=3)
         session.draft = draft
-        yield self._sse("step_complete", {"step": 3, "content": draft})
+        yield self._sse("step_complete", {
+            "step": 3, "content": draft,
+            "reference_data": {"reference_examples": reference_section},
+        })
 
         # Wait for user feedback
         session.status = "waiting"
@@ -521,7 +711,11 @@ class LinkedInAgent:
         yield self._sse("step_start", {"step": 5, "name": "가이드라인 평가"})
 
         final_draft = session.improved_draft or session.draft
-        guidelines_text = guidelines if guidelines else "기본 LinkedIn 포스팅 규칙"
+        # 시나리오별 필터링된 지침서 사용
+        scenario_guidelines = self._extract_scenario_guidelines(session.scenario, guidelines)
+        guidelines_text = scenario_guidelines if scenario_guidelines else (
+            guidelines if guidelines else "기본 LinkedIn 포스팅 규칙"
+        )
 
         prompt = f"""다음 LinkedIn 포스트를 지침 항목별로 평가해주세요.
 
@@ -615,6 +809,7 @@ JSON만 출력하세요. 다른 설명은 불필요합니다."""
             evaluation=session.evaluation,
             user_feedback=session.user_feedback,
             iteration_count=session.iteration_count,
+            guidelines_checklist=session.guidelines_checklist,
             status="final",
         )
         self.db.add(draft)
@@ -622,6 +817,62 @@ JSON만 출력하세요. 다른 설명은 불필요합니다."""
         self.db.commit()
         self.db.refresh(draft)
         return draft
+
+    def chat_refine(self, session: AgentSession, user_message: str) -> dict:
+        """Refine draft via chat message. Returns updated draft and chat history."""
+        import time as _time
+
+        current_draft = session.improved_draft or session.draft
+
+        # Build chat context
+        chat_context = ""
+        for msg in session.chat_messages:
+            role_label = "사용자" if msg["role"] == "user" else "어시스턴트"
+            chat_context += f"\n[{role_label}]: {msg['content']}\n"
+
+        prompt = f"""다음 LinkedIn 포스트를 사용자의 요청에 따라 수정해주세요.
+
+## 현재 초안
+{current_draft}
+
+## 기사 분석
+{session.analysis}
+
+## 적용된 가이드라인 체크리스트
+{session.guidelines_checklist}
+{f'''
+## 이전 대화
+{chat_context}
+''' if chat_context else ''}
+## 사용자 요청
+{user_message}
+
+## 중요
+- 사용자의 요청사항만 반영하고, 나머지는 그대로 유지하세요
+- LinkedIn 포스트 본문만 출력하세요
+- 설명 없이 바로 사용 가능한 형태
+- 1200자 이상 1800자 이하 유지"""
+
+        revised = self._call_claude_sync(prompt)
+
+        # Update session
+        session.improved_draft = revised
+        timestamp = _time.strftime("%Y-%m-%d %H:%M:%S")
+        session.chat_messages.append({"role": "user", "content": user_message, "timestamp": timestamp})
+        session.chat_messages.append({"role": "assistant", "content": f"수정 완료 ({len(revised)}자)", "timestamp": timestamp})
+
+        # Update DB
+        draft_record = self.db.query(LinkedInDraft).filter(LinkedInDraft.id == session.draft_id).first()
+        if draft_record:
+            draft_record.draft_content = revised
+            draft_record.chat_history = json.dumps(session.chat_messages, ensure_ascii=False)
+            self.db.commit()
+
+        return {
+            "revised_draft": revised,
+            "char_count": len(revised),
+            "chat_history": session.chat_messages,
+        }
 
     def _sse(self, event: str, data: dict) -> str:
         """Format an SSE event string."""

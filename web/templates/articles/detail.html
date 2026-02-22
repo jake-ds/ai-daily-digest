@@ -46,6 +46,73 @@
     /* Evaluation table styles */
     .eval-pass { color: #16a34a; }
     .eval-fail { color: #dc2626; }
+
+    /* Reference data toggle */
+    .ref-data-content {
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.3s ease;
+    }
+    .ref-data-content.expanded {
+        max-height: 10000px;
+    }
+
+    /* Chat messages */
+    .chat-msg-user {
+        background: #ede9fe;
+        border-radius: 12px 12px 0 12px;
+        margin-left: auto;
+        max-width: 80%;
+    }
+    .chat-msg-assistant {
+        background: #f3f4f6;
+        border-radius: 12px 12px 12px 0;
+        max-width: 80%;
+    }
+
+    /* Char counter colors */
+    .char-danger { color: #dc2626; }
+    .char-warning { color: #d97706; }
+    .char-ideal { color: #16a34a; }
+
+    /* Hook Lab styles */
+    .hook-card {
+        border: 2px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 16px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .hook-card:hover {
+        border-color: #f59e0b;
+        background: #fffbeb;
+    }
+    .hook-card.selected {
+        border-color: #f59e0b;
+        background: #fef3c7;
+        box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2);
+    }
+    .hook-preview {
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 12px 16px;
+        font-size: 14px;
+        line-height: 1.5;
+        white-space: pre-wrap;
+        color: #1a1a1a;
+    }
+    .hook-preview .fold-indicator {
+        color: #6b7280;
+        font-size: 13px;
+    }
+    .hook-style-badge {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 9999px;
+        font-size: 11px;
+        font-weight: 600;
+    }
 </style>
 {% endblock %}
 
@@ -181,19 +248,32 @@
         </div>
 
         <!-- Generation Buttons -->
-        <div class="flex gap-3 mb-6">
+        <div class="flex flex-wrap gap-3 mb-4">
+            <!-- Hook Lab -->
+            <button
+                id="hook-lab-btn"
+                onclick="startHookLab()"
+                class="inline-flex items-center px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition disabled:opacity-50"
+            >
+                <span id="hook-lab-spinner" class="hidden">
+                    <svg class="animate-spin -ml-1 mr-2 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                </span>
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                </svg>
+                Hook Lab
+            </button>
+
             <!-- Simple Generate -->
             <button
                 id="generate-btn"
-                hx-post="/api/linkedin/generate/{{ article.id }}"
-                hx-include="#scenario-select"
-                hx-vals='js:{"scenario": document.getElementById("scenario-select").value}'
-                hx-target="#drafts-container"
-                hx-swap="afterbegin"
-                hx-indicator="#generate-spinner"
+                onclick="generateWithHook()"
                 class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
             >
-                <span id="generate-spinner" class="htmx-indicator">
+                <span id="generate-spinner" class="hidden">
                     <svg class="animate-spin -ml-1 mr-2 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -218,6 +298,62 @@
             </button>
         </div>
 
+        <!-- Hook Lab Panel (hidden by default) -->
+        <div id="hook-lab-panel" class="hidden mb-6">
+            <div class="border rounded-lg overflow-hidden">
+                <div class="bg-amber-50 px-4 py-3 border-b flex items-center justify-between">
+                    <div class="flex items-center">
+                        <span class="text-amber-700 font-semibold">Hook Lab</span>
+                        <span class="ml-2 text-sm text-amber-600">훅을 먼저 선택하고, 그 훅으로 초안을 생성합니다</span>
+                    </div>
+                    <button onclick="closeHookLab()" class="text-gray-500 hover:text-gray-700">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Hook Cards -->
+                <div id="hook-cards" class="p-4 space-y-3">
+                    <div class="text-center text-gray-500 py-4">훅 생성 중...</div>
+                </div>
+
+                <!-- Custom Hook Input -->
+                <div id="hook-custom-section" class="hidden px-4 pb-4">
+                    <div class="border-t pt-4">
+                        <div class="text-sm font-medium text-gray-700 mb-2">직접 입력</div>
+                        <div id="hook-custom-card" class="border-2 border-dashed border-gray-300 rounded-xl p-4 transition-all">
+                            <textarea id="hook-custom-textarea" rows="3"
+                                class="w-full text-sm border rounded-lg p-3 focus:ring-2 focus:ring-amber-300 focus:border-amber-400"
+                                placeholder="나만의 훅을 직접 작성하세요 (1-3줄)"
+                                oninput="onCustomHookInput()"
+                                onfocus="activateCustomHook()"></textarea>
+                            <div class="flex items-center justify-between mt-2">
+                                <span id="hook-custom-counter" class="text-xs text-gray-500">0자</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Selected Hook Actions -->
+                <div id="hook-actions" class="hidden px-4 py-3 border-t bg-gray-50 flex items-center justify-between">
+                    <span class="text-sm text-gray-600">
+                        선택된 훅: <strong id="hook-selected-style" class="text-amber-700"></strong>
+                    </span>
+                    <div class="flex gap-2">
+                        <button onclick="generateWithSelectedHook()"
+                                class="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700">
+                            이 훅으로 초안 생성
+                        </button>
+                        <button onclick="agentWithSelectedHook()"
+                                class="px-4 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700">
+                            이 훅으로 Agent 모드
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Agent Workspace (hidden by default) -->
         <div id="agent-workspace" class="hidden mb-6">
             <div class="border rounded-lg overflow-hidden">
@@ -236,6 +372,79 @@
                 <!-- Steps Timeline -->
                 <div id="agent-steps" class="p-4 space-y-1">
                     <!-- Steps will be dynamically populated -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Agent Result Panel (shown after agent completes, replaces page reload) -->
+        <div id="agent-result-panel" class="hidden mb-6 space-y-4">
+            <!-- Final Draft Display -->
+            <div class="border rounded-lg overflow-hidden">
+                <div class="bg-green-50 px-4 py-3 border-b flex items-center justify-between">
+                    <span class="text-green-700 font-semibold">최종 초안</span>
+                    <div class="flex items-center gap-2">
+                        <span id="agent-draft-char-count" class="text-xs text-gray-500"></span>
+                        <button onclick="copyToClipboard(document.getElementById('agent-final-draft').innerText)"
+                                class="px-3 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300">
+                            복사
+                        </button>
+                        <button onclick="toggleAgentEditor()"
+                                class="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200">
+                            직접 편집
+                        </button>
+                        <button onclick="finalizeAgentDraft()"
+                                class="px-3 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200">
+                            확정
+                        </button>
+                    </div>
+                </div>
+                <div class="p-4">
+                    <div id="agent-final-draft" class="prose prose-sm max-w-none whitespace-pre-wrap text-gray-800"></div>
+                </div>
+            </div>
+
+            <!-- Direct Editor (hidden by default) -->
+            <div id="agent-editor-panel" class="hidden border rounded-lg overflow-hidden">
+                <div class="bg-blue-50 px-4 py-3 border-b">
+                    <span class="text-blue-700 font-semibold">직접 편집</span>
+                </div>
+                <div class="p-4">
+                    <textarea id="agent-editor-textarea" rows="15"
+                        class="w-full text-sm border rounded-lg p-3 focus:ring-2 focus:ring-blue-300 focus:border-blue-400"
+                        oninput="updateEditorCharCount()"></textarea>
+                    <div class="flex items-center justify-between mt-2">
+                        <span id="editor-char-counter" class="text-sm font-medium"></span>
+                        <div class="flex gap-2">
+                            <button onclick="cancelAgentEditor()"
+                                    class="px-4 py-1.5 bg-gray-200 text-gray-700 text-sm rounded hover:bg-gray-300">
+                                취소
+                            </button>
+                            <button onclick="saveAgentEditor()"
+                                    class="px-4 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700">
+                                저장
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chat Interface -->
+            <div class="border rounded-lg overflow-hidden">
+                <div class="bg-purple-50 px-4 py-3 border-b">
+                    <span class="text-purple-700 font-semibold">채팅으로 개선</span>
+                </div>
+                <div class="p-4">
+                    <div id="chat-messages" class="space-y-3 mb-4 max-h-80 overflow-y-auto"></div>
+                    <div class="flex gap-2">
+                        <input type="text" id="chat-input"
+                            class="flex-1 text-sm border rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-300 focus:border-purple-400"
+                            placeholder="수정 요청을 입력하세요... (예: 훅을 더 강렬하게)"
+                            onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault();sendChatMessage()}">
+                        <button onclick="sendChatMessage()" id="chat-send-btn"
+                                class="px-4 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 disabled:opacity-50">
+                            전송
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -260,9 +469,18 @@
                         {% endif %}
                     </div>
                     <div class="flex items-center space-x-2">
+                        <span class="text-xs" id="draft-char-badge-{{ draft.id }}"></span>
                         <button onclick="copyToClipboard(document.getElementById('draft-{{ draft.id }}').innerText)"
                                 class="px-3 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300">
                             Copy
+                        </button>
+                        <button onclick="startDraftEdit({{ draft.id }})"
+                                class="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200">
+                            편집
+                        </button>
+                        <button onclick="toggleDraftChat({{ draft.id }})"
+                                class="px-3 py-1 text-xs bg-purple-100 text-purple-700 rounded hover:bg-purple-200">
+                            채팅
                         </button>
                         {% if draft.status == 'draft' %}
                         <button onclick="finalizeDraft({{ draft.id }})"
@@ -281,6 +499,46 @@
                     </div>
                 </div>
                 <div id="draft-{{ draft.id }}" class="prose prose-sm max-w-none whitespace-pre-wrap text-gray-800">{{ draft.draft_content }}</div>
+
+                <!-- Inline Edit Panel (hidden by default) -->
+                <div id="draft-edit-{{ draft.id }}" class="hidden mt-3">
+                    <textarea id="draft-edit-textarea-{{ draft.id }}" rows="15"
+                        class="w-full text-sm border rounded-lg p-3 focus:ring-2 focus:ring-blue-300 focus:border-blue-400"
+                        oninput="updateDraftEditCharCount({{ draft.id }})"></textarea>
+                    <div class="flex items-center justify-between mt-2">
+                        <span id="draft-edit-counter-{{ draft.id }}" class="text-sm font-medium"></span>
+                        <div class="flex gap-2">
+                            <button onclick="cancelDraftEdit({{ draft.id }})"
+                                    class="px-4 py-1.5 bg-gray-200 text-gray-700 text-sm rounded hover:bg-gray-300">
+                                취소
+                            </button>
+                            <button onclick="saveDraftEdit({{ draft.id }})"
+                                    class="px-4 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700">
+                                저장
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Draft Chat Panel (hidden by default) -->
+                <div id="draft-chat-{{ draft.id }}" class="hidden mt-3 border rounded-lg overflow-hidden">
+                    <div class="bg-purple-50 px-4 py-2 border-b">
+                        <span class="text-purple-700 text-sm font-semibold">채팅으로 개선</span>
+                    </div>
+                    <div class="p-3">
+                        <div id="draft-chat-messages-{{ draft.id }}" class="space-y-2 mb-3 max-h-60 overflow-y-auto"></div>
+                        <div class="flex gap-2">
+                            <input type="text" id="draft-chat-input-{{ draft.id }}"
+                                class="flex-1 text-sm border rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-300 focus:border-purple-400"
+                                placeholder="수정 요청을 입력하세요..."
+                                onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault();sendDraftChat({{ draft.id }})}">
+                            <button onclick="sendDraftChat({{ draft.id }})" id="draft-chat-send-{{ draft.id }}"
+                                    class="px-4 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 disabled:opacity-50">
+                                전송
+                            </button>
+                        </div>
+                    </div>
+                </div>
 
                 {% if draft.evaluation %}
                 <div class="mt-3 pt-3 border-t">
@@ -325,9 +583,19 @@ try { draftEvaluations[{{ draft.id }}] = JSON.parse({{ draft.evaluation | tojson
 {% endif %}
 {% endfor %}
 
+// Chat history from existing drafts
+const draftChatHistories = {};
+{% for draft in drafts %}
+{% if draft.chat_history %}
+try { draftChatHistories[{{ draft.id }}] = JSON.parse({{ draft.chat_history | tojson }}); } catch(e) {}
+{% endif %}
+{% endfor %}
+
 // Agent state
 let agentSessionId = null;
+let agentDraftId = null;
 let eventSource = null;
+let stepReferenceData = {};
 
 // Mark as read on page load
 document.addEventListener('DOMContentLoaded', function() {
@@ -385,8 +653,13 @@ function startAgentMode() {
 
     updateAgentStatus('연결 중...', 'bg-yellow-100 text-yellow-700');
 
-    // Start SSE connection
-    fetch(`/api/linkedin/agent/start/${articleId}?scenario=${scenario}`, {
+    // Start SSE connection (with optional hook)
+    let agentUrl = `/api/linkedin/agent/start/${articleId}?scenario=${scenario}`;
+    if (selectedHookText) {
+        agentUrl += `&hook=${encodeURIComponent(selectedHookText)}`;
+    }
+
+    fetch(agentUrl, {
         method: 'POST',
     }).then(response => {
         const reader = response.body.getReader();
@@ -457,6 +730,9 @@ function handleAgentEvent(event, data) {
             break;
 
         case 'step_complete':
+            if (data.reference_data) {
+                stepReferenceData[data.step] = data.reference_data;
+            }
             completeStep(data.step, data.content);
             break;
 
@@ -551,6 +827,26 @@ function completeStep(stepId, content) {
         }
     } else {
         textEl.textContent = content;
+    }
+
+    // Add reference data toggle if available
+    const refData = stepReferenceData[stepId];
+    if (refData) {
+        const refKey = Object.keys(refData)[0];
+        const refContent = typeof refData[refKey] === 'string' ? refData[refKey] : JSON.stringify(refData[refKey], null, 2);
+        if (refContent && refContent.length > 0) {
+            const refId = `ref-data-${stepId}`;
+            const refHtml = `
+                <div class="mt-2 border-t pt-2">
+                    <button onclick="document.getElementById('${refId}').classList.toggle('expanded')" class="text-xs text-purple-600 hover:text-purple-800">
+                        참고 자료 보기
+                    </button>
+                    <div id="${refId}" class="ref-data-content">
+                        <pre class="mt-1 p-2 bg-gray-50 border rounded text-xs text-gray-600 whitespace-pre-wrap overflow-x-auto max-h-96 overflow-y-auto">${escapeHtml(refContent)}</pre>
+                    </div>
+                </div>`;
+            textEl.insertAdjacentHTML('afterend', refHtml);
+        }
     }
 
     // Make collapsible
@@ -659,10 +955,25 @@ function handleAgentComplete(data) {
     document.getElementById('agent-btn').disabled = false;
     document.getElementById('generate-btn').disabled = false;
 
-    showToast('Agent 모드 완료! 최종 초안이 저장되었습니다.', 'success');
+    agentDraftId = data.draft_id;
 
-    // Reload page to show new draft
-    setTimeout(() => location.reload(), 1500);
+    // Show result panel inline
+    const resultPanel = document.getElementById('agent-result-panel');
+    const draftDisplay = document.getElementById('agent-final-draft');
+    const charCount = document.getElementById('agent-draft-char-count');
+
+    draftDisplay.textContent = data.final_draft;
+    charCount.textContent = `${data.final_draft.length}자`;
+    resultPanel.classList.remove('hidden');
+
+    // Collapse step details
+    for (let i = 0; i <= 5; i++) {
+        const contentEl = document.getElementById(`step-content-${i}`);
+        if (contentEl) contentEl.classList.remove('expanded');
+    }
+
+    resultPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    showToast('Agent 모드 완료! 최종 초안이 저장되었습니다.', 'success');
 }
 
 function handleAgentError(data) {
@@ -771,6 +1082,650 @@ document.body.addEventListener('htmx:afterSwap', function(evt) {
     }
 });
 
+// --- Chat ---
+
+async function sendChatMessage() {
+    // Fall back to draft-based chat if no session (e.g., after page refresh)
+    if (!agentSessionId && !agentDraftId) return;
+
+    const input = document.getElementById('chat-input');
+    const msg = input.value.trim();
+    if (!msg) return;
+
+    const sendBtn = document.getElementById('chat-send-btn');
+    sendBtn.disabled = true;
+    input.value = '';
+
+    // Add user message to UI
+    appendChatMessage('user', msg);
+
+    // Show loading
+    const loadingId = 'chat-loading-' + Date.now();
+    const messagesEl = document.getElementById('chat-messages');
+    messagesEl.insertAdjacentHTML('beforeend', `<div id="${loadingId}" class="flex"><div class="chat-msg-assistant px-3 py-2 text-sm text-gray-500">수정 중...</div></div>`);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+
+    // Choose endpoint: session-based if session exists, draft-based as fallback
+    const chatUrl = agentSessionId
+        ? `/api/linkedin/agent/${agentSessionId}/chat`
+        : `/api/linkedin/drafts/${agentDraftId}/chat`;
+
+    try {
+        const resp = await fetch(chatUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: msg }),
+        });
+
+        const data = await resp.json();
+        document.getElementById(loadingId)?.remove();
+
+        if (resp.ok) {
+            appendChatMessage('assistant', `수정 완료 (${data.char_count}자)`);
+            // Update draft display
+            const revised = data.revised_draft || data.updated_content;
+            document.getElementById('agent-final-draft').textContent = revised;
+            document.getElementById('agent-draft-char-count').textContent = `${data.char_count}자`;
+        } else {
+            // If session expired, switch to draft-based and retry
+            if (resp.status === 404 && agentSessionId && agentDraftId) {
+                agentSessionId = null;
+                document.getElementById(loadingId)?.remove();
+                // Re-add user message input and retry
+                input.value = msg;
+                sendBtn.disabled = false;
+                appendChatMessage('assistant', '세션이 만료되어 draft 기반 채팅으로 전환합니다. 다시 전송해주세요.');
+                return;
+            }
+            appendChatMessage('assistant', `오류: ${data.detail || '알 수 없는 오류'}`);
+        }
+    } catch (e) {
+        document.getElementById(loadingId)?.remove();
+        appendChatMessage('assistant', `오류: ${e.message}`);
+    }
+
+    sendBtn.disabled = false;
+    input.focus();
+}
+
+function appendChatMessage(role, content) {
+    const messagesEl = document.getElementById('chat-messages');
+    const cssClass = role === 'user' ? 'chat-msg-user' : 'chat-msg-assistant';
+    const align = role === 'user' ? 'justify-end' : 'justify-start';
+    messagesEl.insertAdjacentHTML('beforeend',
+        `<div class="flex ${align}"><div class="${cssClass} px-3 py-2 text-sm">${escapeHtml(content)}</div></div>`
+    );
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+// --- Direct Editor ---
+
+function toggleAgentEditor() {
+    const panel = document.getElementById('agent-editor-panel');
+    const textarea = document.getElementById('agent-editor-textarea');
+
+    if (panel.classList.contains('hidden')) {
+        textarea.value = document.getElementById('agent-final-draft').textContent;
+        panel.classList.remove('hidden');
+        updateEditorCharCount();
+        textarea.focus();
+    } else {
+        panel.classList.add('hidden');
+    }
+}
+
+function cancelAgentEditor() {
+    document.getElementById('agent-editor-panel').classList.add('hidden');
+}
+
+async function saveAgentEditor() {
+    if (!agentDraftId) return;
+
+    const content = document.getElementById('agent-editor-textarea').value;
+
+    try {
+        const resp = await fetch(`/api/linkedin/drafts/${agentDraftId}/content`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: content }),
+        });
+
+        if (resp.ok) {
+            const data = await resp.json();
+            document.getElementById('agent-final-draft').textContent = content;
+            document.getElementById('agent-draft-char-count').textContent = `${data.char_count}자`;
+            document.getElementById('agent-editor-panel').classList.add('hidden');
+            showToast('저장 완료', 'success');
+        } else {
+            showToast('저장 실패', 'error');
+        }
+    } catch (e) {
+        showToast('저장 오류', 'error');
+    }
+}
+
+function updateEditorCharCount() {
+    const textarea = document.getElementById('agent-editor-textarea');
+    const counter = document.getElementById('editor-char-counter');
+    const len = textarea.value.length;
+
+    let colorClass, label;
+    if (len < 1200) {
+        colorClass = 'char-danger';
+        label = '너무 짧음';
+    } else if (len < 1400) {
+        colorClass = 'char-warning';
+        label = '짧음';
+    } else if (len <= 1600) {
+        colorClass = 'char-ideal';
+        label = '이상적 범위';
+    } else if (len <= 1800) {
+        colorClass = 'char-warning';
+        label = '약간 김';
+    } else {
+        colorClass = 'char-danger';
+        label = '너무 김';
+    }
+
+    counter.innerHTML = `<span class="${colorClass}">${len}자 (${label})</span>`;
+}
+
+async function finalizeAgentDraft() {
+    if (!agentDraftId) return;
+
+    try {
+        const resp = await fetch(`/api/linkedin/drafts/${agentDraftId}/finalize`, { method: 'POST' });
+        if (resp.ok) {
+            showToast('확정 완료!', 'success');
+            setTimeout(() => location.reload(), 500);
+        } else {
+            showToast('확정 실패', 'error');
+        }
+    } catch (e) {
+        showToast('확정 오류', 'error');
+    }
+}
+
+// --- Utility ---
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// --- Draft-based Chat ---
+
+function toggleDraftChat(draftId) {
+    const panel = document.getElementById(`draft-chat-${draftId}`);
+    if (panel.classList.contains('hidden')) {
+        panel.classList.remove('hidden');
+        // Load existing chat history if not already rendered
+        const messagesEl = document.getElementById(`draft-chat-messages-${draftId}`);
+        if (messagesEl.children.length === 0 && draftChatHistories[draftId]) {
+            draftChatHistories[draftId].forEach(msg => {
+                appendDraftChatMessage(draftId, msg.role, msg.content);
+            });
+        }
+        document.getElementById(`draft-chat-input-${draftId}`).focus();
+    } else {
+        panel.classList.add('hidden');
+    }
+}
+
+async function sendDraftChat(draftId) {
+    const input = document.getElementById(`draft-chat-input-${draftId}`);
+    const msg = input.value.trim();
+    if (!msg) return;
+
+    const sendBtn = document.getElementById(`draft-chat-send-${draftId}`);
+    sendBtn.disabled = true;
+    input.value = '';
+
+    appendDraftChatMessage(draftId, 'user', msg);
+
+    // Loading indicator
+    const loadingId = `draft-chat-loading-${Date.now()}`;
+    const messagesEl = document.getElementById(`draft-chat-messages-${draftId}`);
+    messagesEl.insertAdjacentHTML('beforeend',
+        `<div id="${loadingId}" class="flex"><div class="chat-msg-assistant px-3 py-2 text-sm text-gray-500">수정 중...</div></div>`);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+
+    try {
+        const resp = await fetch(`/api/linkedin/drafts/${draftId}/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: msg }),
+        });
+
+        const data = await resp.json();
+        document.getElementById(loadingId)?.remove();
+
+        if (resp.ok) {
+            appendDraftChatMessage(draftId, 'assistant', `수정 완료 (${data.char_count}자)`);
+            // Update draft text and char count badge
+            document.getElementById(`draft-${draftId}`).textContent = data.updated_content;
+            updateDraftCharBadge(draftId, data.char_count);
+        } else {
+            appendDraftChatMessage(draftId, 'assistant', `오류: ${data.detail || '알 수 없는 오류'}`);
+        }
+    } catch (e) {
+        document.getElementById(loadingId)?.remove();
+        appendDraftChatMessage(draftId, 'assistant', `오류: ${e.message}`);
+    }
+
+    sendBtn.disabled = false;
+    input.focus();
+}
+
+function appendDraftChatMessage(draftId, role, content) {
+    const messagesEl = document.getElementById(`draft-chat-messages-${draftId}`);
+    const cssClass = role === 'user' ? 'chat-msg-user' : 'chat-msg-assistant';
+    const align = role === 'user' ? 'justify-end' : 'justify-start';
+    messagesEl.insertAdjacentHTML('beforeend',
+        `<div class="flex ${align}"><div class="${cssClass} px-3 py-2 text-sm">${escapeHtml(content)}</div></div>`
+    );
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+// --- Draft Inline Edit ---
+
+function startDraftEdit(draftId) {
+    const editPanel = document.getElementById(`draft-edit-${draftId}`);
+    const textarea = document.getElementById(`draft-edit-textarea-${draftId}`);
+    const draftContent = document.getElementById(`draft-${draftId}`).textContent;
+
+    if (editPanel.classList.contains('hidden')) {
+        textarea.value = draftContent;
+        editPanel.classList.remove('hidden');
+        updateDraftEditCharCount(draftId);
+        textarea.focus();
+    } else {
+        editPanel.classList.add('hidden');
+    }
+}
+
+function cancelDraftEdit(draftId) {
+    document.getElementById(`draft-edit-${draftId}`).classList.add('hidden');
+}
+
+async function saveDraftEdit(draftId) {
+    const content = document.getElementById(`draft-edit-textarea-${draftId}`).value;
+
+    try {
+        const resp = await fetch(`/api/linkedin/drafts/${draftId}/content`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: content }),
+        });
+
+        if (resp.ok) {
+            const data = await resp.json();
+            document.getElementById(`draft-${draftId}`).textContent = content;
+            updateDraftCharBadge(draftId, data.char_count);
+            document.getElementById(`draft-edit-${draftId}`).classList.add('hidden');
+            showToast('저장 완료', 'success');
+        } else {
+            showToast('저장 실패', 'error');
+        }
+    } catch (e) {
+        showToast('저장 오류', 'error');
+    }
+}
+
+function updateDraftEditCharCount(draftId) {
+    const textarea = document.getElementById(`draft-edit-textarea-${draftId}`);
+    const counter = document.getElementById(`draft-edit-counter-${draftId}`);
+    const len = textarea.value.length;
+    counter.innerHTML = `<span class="${getCharCountClass(len)}">${len}자 (${getCharCountLabel(len)})</span>`;
+}
+
+// --- Char Count Helpers ---
+
+function getCharCountClass(len) {
+    if (len < 1200) return 'char-danger';
+    if (len < 1400) return 'char-warning';
+    if (len <= 1600) return 'char-ideal';
+    if (len <= 1800) return 'char-warning';
+    return 'char-danger';
+}
+
+function getCharCountLabel(len) {
+    if (len < 1200) return '너무 짧음';
+    if (len < 1400) return '짧음';
+    if (len <= 1600) return '이상적 범위';
+    if (len <= 1800) return '약간 김';
+    return '너무 김';
+}
+
+function updateDraftCharBadge(draftId, charCount) {
+    const badge = document.getElementById(`draft-char-badge-${draftId}`);
+    if (badge) {
+        badge.innerHTML = `<span class="${getCharCountClass(charCount)}">${charCount}자</span>`;
+    }
+}
+
+// Initialize char count badges on page load
+document.addEventListener('DOMContentLoaded', function() {
+    {% for draft in drafts %}
+    (function() {
+        const el = document.getElementById('draft-{{ draft.id }}');
+        if (el) updateDraftCharBadge({{ draft.id }}, el.textContent.length);
+    })();
+    {% endfor %}
+});
+
+// --- Hook Lab ---
+
+let selectedHookText = null;
+let generatedHooks = [];
+
+async function startHookLab() {
+    const panel = document.getElementById('hook-lab-panel');
+    const cardsContainer = document.getElementById('hook-cards');
+    const spinner = document.getElementById('hook-lab-spinner');
+    const btn = document.getElementById('hook-lab-btn');
+
+    panel.classList.remove('hidden');
+    cardsContainer.innerHTML = '<div class="text-center text-gray-500 py-4"><svg class="animate-spin h-6 w-6 mx-auto mb-2 text-amber-500" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>훅 생성 중...</div>';
+    document.getElementById('hook-actions').classList.add('hidden');
+    document.getElementById('hook-custom-section').classList.add('hidden');
+    // Reset custom hook input
+    const customTextarea = document.getElementById('hook-custom-textarea');
+    if (customTextarea) { customTextarea.value = ''; }
+    const customCounter = document.getElementById('hook-custom-counter');
+    if (customCounter) { customCounter.textContent = '0자'; }
+    deactivateCustomHook();
+    selectedHookText = null;
+    btn.disabled = true;
+    spinner.classList.remove('hidden');
+
+    const scenario = scenarioSelect.value;
+
+    try {
+        const resp = await fetch(`/api/linkedin/hooks/${articleId}?scenario=${scenario}`, {
+            method: 'POST',
+        });
+
+        if (!resp.ok) {
+            const err = await resp.json();
+            throw new Error(err.detail || 'Hook generation failed');
+        }
+
+        const data = await resp.json();
+        generatedHooks = data.hooks || [];
+        renderHookCards(generatedHooks);
+
+        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (e) {
+        cardsContainer.innerHTML = `<div class="text-center text-red-500 py-4">훅 생성 실패: ${escapeHtml(e.message)}</div>`;
+    }
+
+    btn.disabled = false;
+    spinner.classList.add('hidden');
+}
+
+function closeHookLab() {
+    document.getElementById('hook-lab-panel').classList.add('hidden');
+    document.getElementById('hook-custom-section').classList.add('hidden');
+    selectedHookText = null;
+}
+
+const hookStyleColors = {
+    '숫자형': 'bg-blue-100 text-blue-700',
+    '질문형': 'bg-green-100 text-green-700',
+    '역설': 'bg-red-100 text-red-700',
+    '선언': 'bg-purple-100 text-purple-700',
+    '스토리': 'bg-amber-100 text-amber-700',
+};
+
+function renderHookCards(hooks) {
+    const container = document.getElementById('hook-cards');
+
+    if (!hooks || hooks.length === 0) {
+        container.innerHTML = '<div class="text-center text-gray-500 py-4">훅을 생성하지 못했습니다. 다시 시도해주세요.</div>';
+        return;
+    }
+
+    container.innerHTML = '';
+    hooks.forEach((hook, idx) => {
+        const colorClass = hookStyleColors[hook.style] || 'bg-gray-100 text-gray-700';
+        const preview = renderLinkedInPreview(hook.hook);
+
+        const card = document.createElement('div');
+        card.className = 'hook-card';
+        card.id = `hook-card-${idx}`;
+        card.onclick = () => selectHook(idx);
+        card.innerHTML = `
+            <div class="flex items-start justify-between mb-2">
+                <span class="hook-style-badge ${colorClass}">${escapeHtml(hook.style)}</span>
+                <div class="flex items-center gap-2">
+                    <span class="text-xs text-gray-400" id="hook-char-${idx}">${hook.hook.length}자</span>
+                    <button onclick="event.stopPropagation(); copyHookText(${idx}, this)" class="px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200">복사</button>
+                    <button onclick="event.stopPropagation(); startHookEdit(${idx})" class="px-2 py-0.5 text-xs bg-blue-50 text-blue-600 rounded hover:bg-blue-100">편집</button>
+                </div>
+            </div>
+            <div id="hook-display-${idx}">
+                <div class="hook-preview">${preview}</div>
+                <div class="mt-2 text-xs text-gray-500">${escapeHtml(hook.reasoning)}</div>
+            </div>
+            <div id="hook-edit-${idx}" class="hidden mt-2">
+                <textarea id="hook-edit-textarea-${idx}" class="w-full text-sm border rounded-lg p-3 focus:ring-2 focus:ring-amber-300 focus:border-amber-400" rows="4" oninput="updateHookEditCharCount(${idx})" onclick="event.stopPropagation()">${escapeHtml(hook.hook)}</textarea>
+                <div class="flex items-center justify-between mt-2">
+                    <span id="hook-edit-counter-${idx}" class="text-xs text-gray-500">${hook.hook.length}자</span>
+                    <div class="flex gap-2">
+                        <button onclick="event.stopPropagation(); cancelHookEdit(${idx})" class="px-3 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300">취소</button>
+                        <button onclick="event.stopPropagation(); saveHookEdit(${idx})" class="px-3 py-1 text-xs bg-amber-500 text-white rounded hover:bg-amber-600">저장</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        container.appendChild(card);
+    });
+
+    // Show custom hook section
+    document.getElementById('hook-custom-section').classList.remove('hidden');
+}
+
+function renderLinkedInPreview(hookText) {
+    // LinkedIn '더보기' 접힘점: 약 210자 또는 줄바꿈 3번째
+    const lines = hookText.split('\n');
+    let visibleText = hookText;
+    let isFolded = false;
+
+    if (hookText.length > 210) {
+        visibleText = hookText.substring(0, 210);
+        isFolded = true;
+    } else if (lines.length > 3) {
+        visibleText = lines.slice(0, 3).join('\n');
+        isFolded = true;
+    }
+
+    let html = escapeHtml(visibleText);
+    if (isFolded) {
+        html += '<span class="fold-indicator">... 더보기</span>';
+    }
+    return html;
+}
+
+function selectHook(idx) {
+    // Deselect all hook cards
+    document.querySelectorAll('.hook-card').forEach(c => c.classList.remove('selected'));
+    // Select this one
+    document.getElementById(`hook-card-${idx}`).classList.add('selected');
+
+    // Deselect custom hook (mutual exclusivity)
+    deactivateCustomHook();
+
+    selectedHookText = generatedHooks[idx].hook;
+    const actions = document.getElementById('hook-actions');
+    actions.classList.remove('hidden');
+    document.getElementById('hook-selected-style').textContent = generatedHooks[idx].style;
+}
+
+async function generateWithHook() {
+    const scenario = scenarioSelect.value;
+    const btn = document.getElementById('generate-btn');
+    const spinner = document.getElementById('generate-spinner');
+
+    btn.disabled = true;
+    spinner.classList.remove('hidden');
+
+    let url = `/api/linkedin/generate/${articleId}?scenario=${scenario}`;
+    if (selectedHookText) {
+        url += `&hook=${encodeURIComponent(selectedHookText)}`;
+    }
+
+    try {
+        const resp = await fetch(url, { method: 'POST' });
+        const data = await resp.json();
+
+        if (resp.ok) {
+            // Remove "no drafts" message
+            const noMessage = document.getElementById('no-drafts-message');
+            if (noMessage) noMessage.remove();
+
+            // Insert draft HTML at top of container (reload to get proper template)
+            showToast('Draft generated successfully!', 'success');
+            setTimeout(() => location.reload(), 500);
+        } else {
+            showToast(`생성 실패: ${data.detail || '알 수 없는 오류'}`, 'error');
+        }
+    } catch (e) {
+        showToast(`생성 오류: ${e.message}`, 'error');
+    }
+
+    btn.disabled = false;
+    spinner.classList.add('hidden');
+}
+
+async function generateWithSelectedHook() {
+    if (!selectedHookText) return;
+    await generateWithHook();
+}
+
+function agentWithSelectedHook() {
+    if (!selectedHookText) return;
+    // Close hook lab panel and start agent mode with selected hook
+    document.getElementById('hook-lab-panel').classList.add('hidden');
+    startAgentMode();
+}
+
+// --- Hook Card: Copy & Edit ---
+
+function copyHookText(idx, btnEl) {
+    const text = generatedHooks[idx].hook;
+    navigator.clipboard.writeText(text).then(() => {
+        const originalText = btnEl.textContent;
+        btnEl.textContent = 'Copied!';
+        btnEl.classList.add('bg-green-100', 'text-green-700');
+        btnEl.classList.remove('bg-gray-100', 'text-gray-600');
+        setTimeout(() => {
+            btnEl.textContent = originalText;
+            btnEl.classList.remove('bg-green-100', 'text-green-700');
+            btnEl.classList.add('bg-gray-100', 'text-gray-600');
+        }, 1500);
+    });
+}
+
+function startHookEdit(idx) {
+    const displayEl = document.getElementById(`hook-display-${idx}`);
+    const editEl = document.getElementById(`hook-edit-${idx}`);
+    const textarea = document.getElementById(`hook-edit-textarea-${idx}`);
+
+    displayEl.classList.add('hidden');
+    editEl.classList.remove('hidden');
+    textarea.value = generatedHooks[idx].hook;
+    updateHookEditCharCount(idx);
+    textarea.focus();
+}
+
+function cancelHookEdit(idx) {
+    document.getElementById(`hook-display-${idx}`).classList.remove('hidden');
+    document.getElementById(`hook-edit-${idx}`).classList.add('hidden');
+}
+
+function saveHookEdit(idx) {
+    const textarea = document.getElementById(`hook-edit-textarea-${idx}`);
+    const newText = textarea.value.trim();
+    if (!newText) return;
+
+    // Update the hook data
+    generatedHooks[idx].hook = newText;
+
+    // Update display
+    const displayEl = document.getElementById(`hook-display-${idx}`);
+    const preview = renderLinkedInPreview(newText);
+    displayEl.querySelector('.hook-preview').innerHTML = preview;
+
+    // Update char count in header
+    const charEl = document.getElementById(`hook-char-${idx}`);
+    if (charEl) charEl.textContent = `${newText.length}자`;
+
+    // If this hook is currently selected, update selectedHookText
+    if (document.getElementById(`hook-card-${idx}`).classList.contains('selected')) {
+        selectedHookText = newText;
+    }
+
+    // Switch back to display mode
+    displayEl.classList.remove('hidden');
+    document.getElementById(`hook-edit-${idx}`).classList.add('hidden');
+
+    showToast('훅이 수정되었습니다', 'success');
+}
+
+function updateHookEditCharCount(idx) {
+    const textarea = document.getElementById(`hook-edit-textarea-${idx}`);
+    const counter = document.getElementById(`hook-edit-counter-${idx}`);
+    counter.textContent = `${textarea.value.length}자`;
+}
+
+// --- Custom Hook Input ---
+
+function onCustomHookInput() {
+    const textarea = document.getElementById('hook-custom-textarea');
+    const counter = document.getElementById('hook-custom-counter');
+    const len = textarea.value.length;
+    counter.textContent = `${len}자`;
+
+    if (len > 0) {
+        activateCustomHook();
+    } else {
+        deactivateCustomHook();
+        document.getElementById('hook-actions').classList.add('hidden');
+    }
+}
+
+function activateCustomHook() {
+    const textarea = document.getElementById('hook-custom-textarea');
+    const text = textarea.value.trim();
+    if (!text) return;
+
+    // Deselect all hook cards (mutual exclusivity)
+    document.querySelectorAll('.hook-card').forEach(c => c.classList.remove('selected'));
+
+    // Highlight custom card
+    const customCard = document.getElementById('hook-custom-card');
+    customCard.classList.remove('border-gray-300');
+    customCard.classList.add('border-amber-400', 'bg-amber-50');
+
+    // Set selected hook text
+    selectedHookText = text;
+
+    // Show actions bar with "직접 입력" label
+    const actions = document.getElementById('hook-actions');
+    actions.classList.remove('hidden');
+    document.getElementById('hook-selected-style').textContent = '직접 입력';
+}
+
+function deactivateCustomHook() {
+    const customCard = document.getElementById('hook-custom-card');
+    if (customCard) {
+        customCard.classList.remove('border-amber-400', 'bg-amber-50');
+        customCard.classList.add('border-gray-300');
+    }
+}
+
 // Keyboard shortcuts for article detail page
 document.addEventListener('keydown', function(e) {
     // Skip if in input
@@ -778,8 +1733,12 @@ document.addEventListener('keydown', function(e) {
 
     switch(e.key) {
         case 'Escape':
+            // Close editor if open
+            if (!document.getElementById('agent-editor-panel').classList.contains('hidden')) {
+                cancelAgentEditor();
+            }
             // Close agent workspace if open, else go back
-            if (!document.getElementById('agent-workspace').classList.contains('hidden')) {
+            else if (!document.getElementById('agent-workspace').classList.contains('hidden')) {
                 closeAgentWorkspace();
             } else {
                 window.location.href = '/articles';
@@ -797,6 +1756,12 @@ document.addEventListener('keydown', function(e) {
             e.preventDefault();
             if (!document.getElementById('agent-btn').disabled) {
                 startAgentMode();
+            }
+            break;
+        case 'h':
+            e.preventDefault();
+            if (!document.getElementById('hook-lab-btn').disabled) {
+                startHookLab();
             }
             break;
     }

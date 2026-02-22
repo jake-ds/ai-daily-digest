@@ -48,12 +48,27 @@ def migrate_db():
             "status": "VARCHAR(20) DEFAULT 'draft'",
             "linkedin_url": "TEXT",
             "published_at": "DATETIME",
+            "chat_history": "TEXT",
+            "guidelines_checklist": "TEXT",
         }
         with engine.begin() as conn:
             for col_name, col_type in new_columns.items():
                 if col_name not in existing:
                     conn.execute(text(
                         f"ALTER TABLE linkedin_drafts ADD COLUMN {col_name} {col_type}"
+                    ))
+
+    # Reference posts 테이블 마이그레이션
+    if "reference_posts" in inspector.get_table_names():
+        existing_ref = {col["name"] for col in inspector.get_columns("reference_posts")}
+        ref_columns = {
+            "scenario": "VARCHAR(10)",
+        }
+        with engine.begin() as conn:
+            for col_name, col_type in ref_columns.items():
+                if col_name not in existing_ref:
+                    conn.execute(text(
+                        f"ALTER TABLE reference_posts ADD COLUMN {col_name} {col_type}"
                     ))
 
 

@@ -183,6 +183,19 @@ class LinkedInService:
     FORBIDDEN_WORDS = [
         "여러분", "혁명", "패러다임 시프트", "게임체인저",
         "하세요", "해보세요", "읽어주셔서 감사",
+        "전환점", "돌풍", "대전환",
+    ]
+
+    # 조언톤 패턴
+    ADVICE_PATTERNS = [
+        r"~하세요", r"~해보세요", r"~해볼까요", r"~합시다",
+        r"해보시기", r"시작하세요", r"도전하세요", r"고민하세요",
+    ]
+
+    # 공포마케팅 패턴
+    FEAR_PATTERNS = [
+        r"뒤처", r"늦으면", r"지금 안 하면", r"놓치면",
+        r"도태", r"살아남", r"따라잡",
     ]
 
     def _validate_draft(self, content: str, article_url: str) -> dict:
@@ -201,16 +214,36 @@ class LinkedInService:
             if word in content:
                 issues.append(f"금지어 포함: '{word}'")
 
-        # 이모지 체크
+        # 3. 조언톤 정규식 체크
+        for pattern in self.ADVICE_PATTERNS:
+            if re.search(pattern, content):
+                issues.append(f"조언톤 감지: '{pattern}'")
+
+        # 4. 공포마케팅 패턴 체크
+        for pattern in self.FEAR_PATTERNS:
+            if re.search(pattern, content):
+                issues.append(f"공포마케팅 감지: '{pattern}'")
+
+        # 5. 이모지 체크
         import unicodedata
         for char in content:
             if unicodedata.category(char).startswith("So"):
                 issues.append("이모지 포함됨")
                 break
 
-        # 3. 원문 링크 포함 여부
+        # 6. 원문 링크 포함 여부
         if article_url and article_url not in content:
             issues.append("원문 링크가 포함되지 않음")
+
+        # 7. 구조 체크: 단락 수 최소 3개
+        paragraphs = [p.strip() for p in content.split("\n\n") if p.strip()]
+        if len(paragraphs) < 3:
+            issues.append(f"단락 수 부족: {len(paragraphs)}개 (최소 3개 필요)")
+
+        # 8. 훅(첫 줄) 210자 이내
+        first_line = content.strip().split("\n")[0] if content.strip() else ""
+        if len(first_line) > 210:
+            issues.append(f"훅이 너무 김: {len(first_line)}자 (최대 210자)")
 
         return {
             "valid": len(issues) == 0,
@@ -218,10 +251,277 @@ class LinkedInService:
             "char_count": char_count,
         }
 
+    def _extract_scenario_guidelines(self, scenario: str) -> str:
+        """Extract common rules + specific scenario section from guidelines."""
+        if not self.guidelines:
+            return ""
+
+        sections = []
+
+        # 1. Persona section
+        persona_match = re.search(
+            r'## Persona\n(.*?)(?=\n---)',
+            self.guidelines, re.DOTALL,
+        )
+        if persona_match:
+            sections.append(f"## 페르소나\n{persona_match.group(1).strip()}")
+
+        # 2. Specific scenario guide
+        scenario_pattern = rf'### 시나리오 {scenario}:.*?(?=\n---|\n### 시나리오 [A-F]:|$)'
+        scenario_match = re.search(scenario_pattern, self.guidelines, re.DOTALL)
+        if scenario_match:
+            sections.append(scenario_match.group(0).strip())
+
+        # 3. Common rules (공통 규칙 section)
+        common_match = re.search(
+            r'## 공통 규칙\n(.*?)(?=\n## |$)',
+            self.guidelines, re.DOTALL,
+        )
+        if common_match:
+            sections.append(f"## 공통 규칙\n{common_match.group(1).strip()}")
+
+        # 4. Specific scenario example
+        example_pattern = rf'### 시나리오 {scenario} 예시.*?```\n(.*?)```'
+        example_match = re.search(example_pattern, self.guidelines, re.DOTALL)
+        if example_match:
+            sections.append(f"## 이 시나리오의 예시\n```\n{example_match.group(1).strip()}\n```")
+
+        return "\n\n".join(sections)
+
+    def _extract_persona(self) -> str:
+        """Extract persona section from guidelines."""
+        if not self.guidelines:
+            return ""
+
+        persona_match = re.search(
+            r'## Persona\n(.*?)(?=\n---)',
+            self.guidelines, re.DOTALL,
+        )
+        if persona_match:
+            return persona_match.group(1).strip()
+
+        return ""
+
+    def _get_past_learnings(self, limit: int = 5) -> str:
+        """Extract learnings from past drafts (FAIL patterns, user feedback).
+
+        Returns a formatted string of past mistakes to avoid, limited to ~500 chars.
+        """
+        try:
+            # 최근 final 드래프트에서 evaluation 데이터 가져오기
+            past_drafts = (
+                self.db.query(LinkedInDraft)
+                .filter(LinkedInDraft.evaluation.isnot(None))
+                .order_by(LinkedInDraft.created_at.desc())
+                .limit(limit)
+                .all()
+            )
+
+            if not past_drafts:
+                return ""
+
+            fail_patterns = []
+            user_corrections = []
+
+            for draft in past_drafts:
+                # evaluation에서 FAIL 항목 추출
+                if draft.evaluation:
+                    try:
+                        eval_data = json.loads(draft.evaluation)
+                        for item in eval_data.get("items", []):
+                            if not item.get("pass", True):
+                                fail_msg = f"[{item.get('category', '')}] {item.get('rule', '')}"
+                                if fail_msg not in fail_patterns:
+                                    fail_patterns.append(fail_msg)
+                    except (json.JSONDecodeError, KeyError):
+                        pass
+
+                # user_feedback에서 수정 요청 추출
+                if draft.user_feedback and draft.user_feedback.strip():
+                    user_corrections.append(draft.user_feedback.strip()[:100])
+
+                # chat_history에서 사용자 수정 요청 추출
+                if draft.chat_history:
+                    try:
+                        chats = json.loads(draft.chat_history)
+                        for msg in chats:
+                            if msg.get("role") == "user":
+                                user_corrections.append(msg["content"][:100])
+                    except (json.JSONDecodeError, KeyError):
+                        pass
+
+            if not fail_patterns and not user_corrections:
+                return ""
+
+            result_parts = []
+            if fail_patterns:
+                result_parts.append("## 반복 실수 방지 (이전 드래프트에서 FAIL된 항목)")
+                for p in fail_patterns[:5]:
+                    result_parts.append(f"- {p}")
+
+            if user_corrections:
+                result_parts.append("\n## 사용자 수정 이력 (이전 피드백)")
+                for c in user_corrections[:3]:
+                    result_parts.append(f"- {c}")
+
+            result = "\n".join(result_parts)
+            # 500자 제한
+            if len(result) > 500:
+                result = result[:497] + "..."
+
+            return result
+
+        except Exception:
+            return ""
+
+    def _quick_evaluate(self, draft_content: str) -> str:
+        """Quick evaluation using Haiku for simple mode drafts.
+
+        Returns JSON evaluation string.
+        """
+        try:
+            prompt = f"""다음 LinkedIn 포스트를 간략히 평가해주세요.
+
+## 포스트
+{draft_content}
+
+## 평가 항목
+1. 문체 (하십시오체 준수)
+2. 금지어 사용 여부 (이모지, 여러분, 과장표현)
+3. 구조 (훅-본문-마무리)
+4. 길이 (1200-1800자)
+5. 조언톤 여부
+
+## 출력 형식 (JSON만)
+{{"overall_score": 85, "items": [{{"category": "문체", "rule": "하십시오체", "pass": true, "comment": "적절"}}], "summary": "한 줄 요약"}}"""
+
+            response = self.client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=1000,
+                messages=[{"role": "user", "content": prompt}],
+            )
+
+            raw = response.content[0].text
+            json_start = raw.find("{")
+            json_end = raw.rfind("}") + 1
+            if json_start >= 0 and json_end > json_start:
+                evaluation_json = raw[json_start:json_end]
+                json.loads(evaluation_json)  # validate
+                return evaluation_json
+
+            return json.dumps({"overall_score": 0, "error": "평가 결과 파싱 실패"})
+        except Exception as e:
+            return json.dumps({"overall_score": 0, "error": str(e)})
+
+    def generate_hooks(
+        self,
+        article: Article,
+        scenario: Optional[str] = None,
+        count: int = 5,
+    ) -> List[dict]:
+        """Generate multiple hook options before full draft.
+
+        Args:
+            article: Article to generate hooks for
+            scenario: Scenario (A-F), auto-detected if not provided
+            count: Number of hooks to generate (default 5)
+
+        Returns:
+            list[dict] — 각 {hook: str, style: str, reasoning: str}
+        """
+        # 매번 지침서 새로 로드 (hot-reload)
+        self.guidelines = self._load_guidelines()
+
+        if scenario is None:
+            scenario = self.detect_scenario(article)
+
+        scenario_info = SCENARIOS.get(scenario, SCENARIOS["A"])
+        article_context = self._build_article_context(article)
+
+        # 시나리오별 지침서 추출
+        hook_guidelines = ""
+        scenario_guidelines = self._extract_scenario_guidelines(scenario)
+        if scenario_guidelines:
+            hook_guidelines = f"""
+## 지침서 참고 (이 시나리오의 훅 관련 규칙)
+{scenario_guidelines}"""
+
+        # 페르소나 추출
+        persona = self._extract_persona()
+        if not persona:
+            persona = "- VC 심사역 + ML 엔지니어 출신 AI 빌더\n- 최신 AI 기술과 시장 동향에 깊은 이해"
+
+        prompt = f"""당신은 LinkedIn 포스팅 전문가입니다. 다음 기사에 대해 LinkedIn 포스트의 훅(첫 1-3줄)을 {count}개 생성해주세요.
+
+## 페르소나
+{persona}
+
+## 시나리오 {scenario}: {scenario_info['name']}
+- 훅 스타일: {scenario_info['hook_style']}
+- 설명: {scenario_info['description']}
+
+{article_context}
+{hook_guidelines}
+## 훅 작성 규칙
+- 각 훅은 1-3줄 (최대 210자 이내 — LinkedIn '더보기' 접힘점 기준)
+- {count}개의 훅은 각각 다른 접근법/스타일이어야 함
+- 금지: 이모지, "여러분", "혁명", "패러다임 시프트" 등 과장 표현
+- 문체: 하십시오체 기본, 자연스러운 톤
+- 훅만 작성 (본문 전개 X)
+
+## 훅 스타일 분류
+각 훅에 다음 중 하나의 스타일을 태깅하세요:
+- 숫자형: 충격적 수치/통계로 시작
+- 질문형: 독자의 호기심을 자극하는 질문
+- 역설: 통념을 뒤집는 반전 제시
+- 선언: 강한 의견이나 행동 선언
+- 스토리: 개인 경험/관찰로 시작
+
+## 출력 형식 (JSON 배열만 출력)
+```json
+[
+  {{"hook": "훅 텍스트", "style": "숫자형", "reasoning": "왜 이 훅이 효과적인지 한 문장"}},
+  ...
+]
+```
+
+JSON만 출력하세요. 다른 설명은 불필요합니다."""
+
+        response = self.client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=2000,
+            messages=[{"role": "user", "content": prompt}],
+        )
+
+        raw = response.content[0].text
+
+        # JSON 배열 파싱
+        try:
+            json_start = raw.find("[")
+            json_end = raw.rfind("]") + 1
+            if json_start >= 0 and json_end > json_start:
+                hooks = json.loads(raw[json_start:json_end])
+                # 필수 필드 검증
+                validated = []
+                for h in hooks:
+                    if isinstance(h, dict) and "hook" in h:
+                        validated.append({
+                            "hook": h["hook"],
+                            "style": h.get("style", "기타"),
+                            "reasoning": h.get("reasoning", ""),
+                        })
+                return validated[:count]
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+        # 파싱 실패 시 빈 리스트 반환
+        return []
+
     def generate_draft(
         self,
         article: Article,
         scenario: Optional[str] = None,
+        hook: Optional[str] = None,
     ) -> LinkedInDraft:
         """
         Generate a LinkedIn draft for an article.
@@ -229,6 +529,7 @@ class LinkedInService:
         Args:
             article: Article to generate draft for
             scenario: Scenario (A-F), auto-detected if not provided
+            hook: Pre-selected hook text to use as opening
 
         Returns:
             LinkedInDraft record
@@ -242,7 +543,7 @@ class LinkedInService:
         scenario_info = SCENARIOS.get(scenario, SCENARIOS["A"])
 
         # Build the prompt
-        prompt = self._build_prompt(article, scenario, scenario_info)
+        prompt = self._build_prompt(article, scenario, scenario_info, hook=hook)
 
         # Generate with Claude
         response = self.client.messages.create(
@@ -290,12 +591,16 @@ class LinkedInService:
         )
         version = existing_drafts + 1
 
+        # Simple 모드 간이 평가 (V4-005)
+        evaluation = self._quick_evaluate(draft_content)
+
         # Create draft record
         draft = LinkedInDraft(
             article_id=article.id,
             scenario=scenario,
             draft_content=draft_content,
             version=version,
+            evaluation=evaluation,
         )
         self.db.add(draft)
 
@@ -325,18 +630,35 @@ class LinkedInService:
         )
 
     def _get_reference_examples(self, scenario: str) -> str:
-        """Get reference post examples for the given scenario."""
+        """Get reference post examples for the given scenario (scenario-filtered)."""
         examples = []
 
-        # 1. DB에서 ReferencePost 최대 2개 가져오기
+        # 1. 같은 시나리오 ReferencePost 우선 2개
         ref_posts = (
             self.db.query(ReferencePost)
+            .filter(ReferencePost.scenario == scenario)
             .order_by(ReferencePost.created_at.desc())
             .limit(2)
             .all()
         )
         for post in ref_posts:
             examples.append(post.content)
+
+        # 부족하면 다른 시나리오에서 fallback
+        if len(examples) < 2:
+            remaining = 2 - len(examples)
+            existing_ids = [p.id for p in ref_posts]
+            query = self.db.query(ReferencePost)
+            if existing_ids:
+                query = query.filter(ReferencePost.id.notin_(existing_ids))
+            fallback_posts = (
+                query
+                .order_by(ReferencePost.created_at.desc())
+                .limit(remaining)
+                .all()
+            )
+            for post in fallback_posts:
+                examples.append(post.content)
 
         # 2. 지침서에서 해당 시나리오 예시 추출
         if self.guidelines:
@@ -387,18 +709,19 @@ class LinkedInService:
 
         return "\n".join(lines)
 
-    def _build_prompt(self, article: Article, scenario: str, scenario_info: dict) -> str:
+    def _build_prompt(self, article: Article, scenario: str, scenario_info: dict, hook: Optional[str] = None) -> str:
         """Build the generation prompt with Jake's guidelines."""
         # 기사 정보 섹션 (풍부한 맥락 포함)
         article_section = self._build_article_context(article)
 
-        # 지침서가 있으면 전문 포함, 없으면 하드코딩된 규칙 사용
-        if self.guidelines:
+        # 시나리오 필터링된 지침서 (전문 대신 해당 시나리오 규칙만)
+        scenario_guidelines = self._extract_scenario_guidelines(scenario)
+        if scenario_guidelines:
             rules_section = f"""## 작성 지침서 (반드시 준수)
 
-아래는 LinkedIn 포스팅 작성 지침서 전문입니다. 이 지침을 철저히 따라주세요:
+아래는 시나리오 {scenario}에 해당하는 작성 지침입니다. 이 지침을 철저히 따라주세요:
 
-{self.guidelines}"""
+{scenario_guidelines}"""
         else:
             rules_section = f"""## 공통 규칙
 
@@ -423,12 +746,38 @@ class LinkedInService:
 - 1200~1800자 사이
 - 단락 구분 명확히"""
 
-        return f"""당신은 LinkedIn 포스팅 전문가입니다. 다음 기사를 바탕으로 LinkedIn 포스트를 작성해주세요.
-
-## 페르소나
+        # 페르소나 (지침서에서 추출, 없으면 기본값)
+        persona = self._extract_persona()
+        if persona:
+            persona_section = f"## 페르소나\n{persona}"
+        else:
+            persona_section = """## 페르소나
 - VC 심사역 + ML 엔지니어 출신 AI 빌더
 - 최신 AI 기술과 시장 동향에 깊은 이해
-- 실무 경험을 바탕으로 인사이트 공유
+- 실무 경험을 바탕으로 인사이트 공유"""
+
+        # 사전 선택된 훅 섹션
+        hook_section = ""
+        if hook:
+            hook_section = f"""## 사용할 훅 (반드시 이 훅으로 시작)
+다음 훅이 사전에 선택되었습니다. 포스트의 첫 부분을 반드시 이 훅으로 시작하세요:
+
+{hook}
+
+이 훅을 그대로 사용하되, 문맥에 맞게 미세 조정은 허용됩니다. 의미나 구조를 변경하지 마세요.
+"""
+
+        # 이전 드래프트 학습 (반복 실수 방지)
+        past_learnings = self._get_past_learnings()
+        learnings_section = ""
+        if past_learnings:
+            learnings_section = f"""
+{past_learnings}
+"""
+
+        return f"""당신은 LinkedIn 포스팅 전문가입니다. 다음 기사를 바탕으로 LinkedIn 포스트를 작성해주세요.
+
+{persona_section}
 
 ## 시나리오 {scenario}: {scenario_info['name']}
 - 설명: {scenario_info['description']}
@@ -440,7 +789,7 @@ class LinkedInService:
 
 {rules_section}
 {self._get_reference_examples(scenario)}
-## LinkedIn 포맷팅 규칙
+{hook_section}{learnings_section}## LinkedIn 포맷팅 규칙
 - 줄바꿈으로 단락을 명확히 구분하세요
 - 짧은 문장을 사용하세요 (한 문장에 2줄 이상 금지)
 - 넘버링(1, 2, 3)을 활용하여 가독성을 높이세요
@@ -461,6 +810,95 @@ class LinkedInService:
 3. "결론적으로~"
 4. "요약하면~"
 """
+
+    def chat_refine_by_draft(self, draft_id: int, user_message: str) -> dict:
+        """Refine draft via chat message using draft from DB (no session needed).
+
+        Args:
+            draft_id: LinkedInDraft ID
+            user_message: User's chat message
+
+        Returns:
+            dict with revised_draft, char_count, chat_history, updated_content
+        """
+        import time as _time
+
+        draft = self.db.query(LinkedInDraft).filter(LinkedInDraft.id == draft_id).first()
+        if not draft:
+            raise ValueError(f"Draft {draft_id} not found")
+
+        current_content = draft.draft_content
+
+        # 기존 채팅 이력 로드
+        chat_messages = []
+        if draft.chat_history:
+            try:
+                chat_messages = json.loads(draft.chat_history)
+            except json.JSONDecodeError:
+                chat_messages = []
+
+        # 채팅 컨텍스트 구성
+        chat_context = ""
+        for msg in chat_messages:
+            role_label = "사용자" if msg["role"] == "user" else "어시스턴트"
+            chat_context += f"\n[{role_label}]: {msg['content']}\n"
+
+        # 가이드라인 체크리스트 (draft에 저장된 것 사용)
+        checklist_section = ""
+        if draft.guidelines_checklist:
+            checklist_section = f"""
+## 적용된 가이드라인 체크리스트
+{draft.guidelines_checklist}
+"""
+
+        # 기사 분석 (agent 모드에서 저장된 것)
+        analysis_section = ""
+        if draft.analysis:
+            analysis_section = f"""
+## 기사 분석
+{draft.analysis}
+"""
+
+        prompt = f"""다음 LinkedIn 포스트를 사용자의 요청에 따라 수정해주세요.
+
+## 현재 초안
+{current_content}
+{analysis_section}{checklist_section}{f'''
+## 이전 대화
+{chat_context}
+''' if chat_context else ''}
+## 사용자 요청
+{user_message}
+
+## 중요
+- 사용자의 요청사항만 반영하고, 나머지는 그대로 유지하세요
+- LinkedIn 포스트 본문만 출력하세요
+- 설명 없이 바로 사용 가능한 형태
+- 1200자 이상 1800자 이하 유지"""
+
+        response = self.client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=2000,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        revised = response.content[0].text
+
+        # 채팅 이력 업데이트
+        timestamp = _time.strftime("%Y-%m-%d %H:%M:%S")
+        chat_messages.append({"role": "user", "content": user_message, "timestamp": timestamp})
+        chat_messages.append({"role": "assistant", "content": f"수정 완료 ({len(revised)}자)", "timestamp": timestamp})
+
+        # DB 업데이트
+        draft.draft_content = revised
+        draft.chat_history = json.dumps(chat_messages, ensure_ascii=False)
+        self.db.commit()
+
+        return {
+            "revised_draft": revised,
+            "char_count": len(revised),
+            "chat_history": chat_messages,
+            "updated_content": revised,
+        }
 
     def get_scenarios(self) -> dict:
         """Get all available scenarios."""

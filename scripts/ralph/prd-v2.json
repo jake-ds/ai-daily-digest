@@ -1,0 +1,16 @@
+{
+  "project": "AI Daily Digest",
+  "version": "v2",
+  "branchName": "ralph/linkedin-quality-boost",
+  "description": "LinkedIn 좋은 글 쓰기 V2: 가이드라인 실제 반영, 레퍼런스 활용, 품질 검증, 반복 개선(채팅+편집), 훅 랩.",
+  "userStories": [
+    { "id": "V2-001", "title": "Fix guidelines integration and import json bug", "priority": 1, "passes": true },
+    { "id": "V2-002", "title": "Add Scenario F and reference posts as few-shot examples", "priority": 2, "passes": true },
+    { "id": "V2-003", "title": "Enrich article context and score-based tone guidance", "priority": 3, "passes": true },
+    { "id": "V2-004", "title": "Post-generation quality validation with auto-retry", "priority": 4, "passes": true },
+    { "id": "V2-005", "title": "Agent mode: real checklist review + evaluation-driven retry", "priority": 5, "passes": true },
+    { "id": "V2-006", "title": "Draft-based chat: guidelines_checklist column + draft chat endpoint", "priority": 6, "passes": true },
+    { "id": "V2-007", "title": "Draft-based chat frontend + existing draft card chat/edit UI", "priority": 7, "passes": true },
+    { "id": "V2-008", "title": "Hook Lab: generate multiple hooks before full draft", "priority": 8, "passes": true }
+  ]
+}
