@@ -13,6 +13,9 @@ Started: 2026년 2월 22일 일요일 11시 40분 59초 KST
 - Agent sessions are in-memory (AgentSession dataclass in linkedin_agent.py); drafts persist in SQLite
 - Draft card UI pattern: buttons in header div, toggleable panels (edit/chat) below draft content, per-draft JS with draftId parameter
 - Agent result panel chat falls back to draft-based if session expired (agentSessionId null, agentDraftId set)
+- Cannot nest f"""...""" inside an f-string — extract to variable first
+- LinkedIn fold point for previews: ~210 chars or 3rd newline
+- When adding Claude API prompts: build sections as variables, then compose in final f-string
 
 ---
 
@@ -48,4 +51,26 @@ Started: 2026년 2월 22일 일요일 11시 40분 59초 KST
   - getCharCountClass/getCharCountLabel helpers are shared between draft edit and agent edit
   - agent-result-panel chat checks agentSessionId first, then falls back to agentDraftId for draft-based chat
   - Template-only changes don't need py_compile
+---
+
+## 2026-02-22 - V2-008
+- What was implemented: Hook Lab — generate multiple hooks before full draft, select a hook, then generate with that hook
+- Files changed:
+  - web/services/linkedin_service.py — added generate_hooks() method, added hook param to generate_draft() and _build_prompt()
+  - web/api/linkedin.py — added POST /hooks/{article_id} endpoint, added hook query param to generate_draft and agent_start
+  - web/services/linkedin_agent.py — added hook field to AgentSession, hook param to run(), hook section in _step_draft()
+  - web/templates/articles/detail.html — Hook Lab UI (button, panel, cards, preview, actions), generateWithHook(), renderLinkedInPreview(), keyboard shortcut 'h'
+- Features added:
+  - generate_hooks(article, scenario, count=5): Claude generates 5 hooks with different styles (숫자형/질문형/역설/선언/스토리)
+  - POST /api/linkedin/hooks/{article_id}?scenario=A: API endpoint returning hook options
+  - Hook Lab panel: amber-themed UI with clickable hook cards, LinkedIn preview (210-char fold point), style badges
+  - "이 훅으로 초안 생성" and "이 훅으로 Agent 모드" buttons after hook selection
+  - hook parameter flows through generate_draft() → _build_prompt() and agent_start() → run() → _step_draft()
+  - Replaced HTMX-based generate button with JS-based generateWithHook() to pass hook param
+- **Learnings for future iterations:**
+  - Cannot nest f"""...""" inside an f-string in Python — must extract to a variable first
+  - renderLinkedInPreview() was NOT already in detail.html despite PRD notes — created from scratch
+  - Hook styles mapped to color classes for visual differentiation in UI
+  - selectedHookText is a module-level JS variable shared between hook lab and generation functions
+  - LinkedIn fold point: ~210 chars or 3rd newline
 ---

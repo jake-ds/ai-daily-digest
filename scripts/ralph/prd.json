@@ -128,8 +128,8 @@
         "python -m py_compile web/services/linkedin_service.py web/api/linkedin.py 통과"
       ],
       "priority": 8,
-      "passes": false,
-      "notes": "LinkedIn '더보기' 접힘점: 약 210자 또는 줄바꿈 3번째. renderLinkedInPreview() 함수가 이미 detail.html에 있으므로 훅 미리보기에 재활용. 훅 스타일 분류는 가이드라인의 시나리오별 hook_style 참고."
+      "passes": true,
+      "notes": "구현 완료: generate_hooks() 메서드 + POST /hooks/{article_id} 엔드포인트 + Hook Lab UI(카드+미리보기+선택) + hook 파라미터 generate_draft()/agent_start() + renderLinkedInPreview()."
     }
   ]
 }

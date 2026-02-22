@@ -50,10 +50,37 @@ async def get_scenarios():
     }
 
 
+@router.post("/hooks/{article_id}")
+async def generate_hooks(
+    article_id: int,
+    scenario: Optional[str] = Query(default=None, regex="^[A-F]$"),
+    count: int = Query(default=5, ge=1, le=10),
+    db: Session = Depends(get_db),
+):
+    """Generate multiple hook options for an article before full draft."""
+    article = db.query(Article).filter(Article.id == article_id).first()
+    if not article:
+        raise HTTPException(status_code=404, detail="Article not found")
+
+    service = LinkedInService(db)
+
+    try:
+        hooks = service.generate_hooks(article, scenario=scenario, count=count)
+        return {
+            "article_id": article_id,
+            "scenario": scenario or service.detect_scenario(article),
+            "hooks": hooks,
+            "count": len(hooks),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Hook generation failed: {str(e)}")
+
+
 @router.post("/generate/{article_id}")
 async def generate_draft(
     article_id: int,
     scenario: Optional[str] = Query(default=None, regex="^[A-F]$"),
+    hook: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
 ):
     """
@@ -61,6 +88,7 @@ async def generate_draft(
 
     - **article_id**: Article ID to generate draft for
     - **scenario**: Scenario (A-F), auto-detected if not provided
+    - **hook**: Pre-selected hook text to use as opening
     """
     article = db.query(Article).filter(Article.id == article_id).first()
     if not article:
@@ -69,7 +97,7 @@ async def generate_draft(
     service = LinkedInService(db)
 
     try:
-        draft = service.generate_draft(article, scenario=scenario)
+        draft = service.generate_draft(article, scenario=scenario, hook=hook)
         return {
             "message": "Draft generated successfully",
             "draft": draft.to_dict(),
@@ -144,6 +172,7 @@ async def delete_draft(
 async def agent_start(
     article_id: int,
     scenario: Optional[str] = Query(default=None, regex="^[A-F]$"),
+    hook: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
 ):
     """Start an agent session for article. Returns SSE stream."""
@@ -156,7 +185,7 @@ async def agent_start(
     agent = LinkedInAgent(db)
 
     async def event_generator():
-        async for event in agent.run(article_id, scenario):
+        async for event in agent.run(article_id, scenario, hook=hook):
             yield event
 
     return StreamingResponse(

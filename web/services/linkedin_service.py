@@ -218,10 +218,110 @@ class LinkedInService:
             "char_count": char_count,
         }
 
+    def generate_hooks(
+        self,
+        article: Article,
+        scenario: Optional[str] = None,
+        count: int = 5,
+    ) -> List[dict]:
+        """Generate multiple hook options before full draft.
+
+        Args:
+            article: Article to generate hooks for
+            scenario: Scenario (A-F), auto-detected if not provided
+            count: Number of hooks to generate (default 5)
+
+        Returns:
+            list[dict] — 각 {hook: str, style: str, reasoning: str}
+        """
+        # 매번 지침서 새로 로드 (hot-reload)
+        self.guidelines = self._load_guidelines()
+
+        if scenario is None:
+            scenario = self.detect_scenario(article)
+
+        scenario_info = SCENARIOS.get(scenario, SCENARIOS["A"])
+        article_context = self._build_article_context(article)
+
+        # 지침서에서 훅 관련 규칙 추출
+        hook_guidelines = ""
+        if self.guidelines:
+            hook_guidelines = f"""
+## 지침서 참고 (훅 관련 규칙 중심으로)
+{self.guidelines}"""
+
+        prompt = f"""당신은 LinkedIn 포스팅 전문가입니다. 다음 기사에 대해 LinkedIn 포스트의 훅(첫 1-3줄)을 {count}개 생성해주세요.
+
+## 페르소나
+- VC 심사역 + ML 엔지니어 출신 AI 빌더
+- 최신 AI 기술과 시장 동향에 깊은 이해
+
+## 시나리오 {scenario}: {scenario_info['name']}
+- 훅 스타일: {scenario_info['hook_style']}
+- 설명: {scenario_info['description']}
+
+{article_context}
+{hook_guidelines}
+## 훅 작성 규칙
+- 각 훅은 1-3줄 (최대 210자 이내 — LinkedIn '더보기' 접힘점 기준)
+- {count}개의 훅은 각각 다른 접근법/스타일이어야 함
+- 금지: 이모지, "여러분", "혁명", "패러다임 시프트" 등 과장 표현
+- 문체: 하십시오체 기본, 자연스러운 톤
+- 훅만 작성 (본문 전개 X)
+
+## 훅 스타일 분류
+각 훅에 다음 중 하나의 스타일을 태깅하세요:
+- 숫자형: 충격적 수치/통계로 시작
+- 질문형: 독자의 호기심을 자극하는 질문
+- 역설: 통념을 뒤집는 반전 제시
+- 선언: 강한 의견이나 행동 선언
+- 스토리: 개인 경험/관찰로 시작
+
+## 출력 형식 (JSON 배열만 출력)
+```json
+[
+  {{"hook": "훅 텍스트", "style": "숫자형", "reasoning": "왜 이 훅이 효과적인지 한 문장"}},
+  ...
+]
+```
+
+JSON만 출력하세요. 다른 설명은 불필요합니다."""
+
+        response = self.client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=2000,
+            messages=[{"role": "user", "content": prompt}],
+        )
+
+        raw = response.content[0].text
+
+        # JSON 배열 파싱
+        try:
+            json_start = raw.find("[")
+            json_end = raw.rfind("]") + 1
+            if json_start >= 0 and json_end > json_start:
+                hooks = json.loads(raw[json_start:json_end])
+                # 필수 필드 검증
+                validated = []
+                for h in hooks:
+                    if isinstance(h, dict) and "hook" in h:
+                        validated.append({
+                            "hook": h["hook"],
+                            "style": h.get("style", "기타"),
+                            "reasoning": h.get("reasoning", ""),
+                        })
+                return validated[:count]
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+        # 파싱 실패 시 빈 리스트 반환
+        return []
+
     def generate_draft(
         self,
         article: Article,
         scenario: Optional[str] = None,
+        hook: Optional[str] = None,
     ) -> LinkedInDraft:
         """
         Generate a LinkedIn draft for an article.
@@ -229,6 +329,7 @@ class LinkedInService:
         Args:
             article: Article to generate draft for
             scenario: Scenario (A-F), auto-detected if not provided
+            hook: Pre-selected hook text to use as opening
 
         Returns:
             LinkedInDraft record
@@ -242,7 +343,7 @@ class LinkedInService:
         scenario_info = SCENARIOS.get(scenario, SCENARIOS["A"])
 
         # Build the prompt
-        prompt = self._build_prompt(article, scenario, scenario_info)
+        prompt = self._build_prompt(article, scenario, scenario_info, hook=hook)
 
         # Generate with Claude
         response = self.client.messages.create(
@@ -387,7 +488,7 @@ class LinkedInService:
 
         return "\n".join(lines)
 
-    def _build_prompt(self, article: Article, scenario: str, scenario_info: dict) -> str:
+    def _build_prompt(self, article: Article, scenario: str, scenario_info: dict, hook: Optional[str] = None) -> str:
         """Build the generation prompt with Jake's guidelines."""
         # 기사 정보 섹션 (풍부한 맥락 포함)
         article_section = self._build_article_context(article)
@@ -423,6 +524,17 @@ class LinkedInService:
 - 1200~1800자 사이
 - 단락 구분 명확히"""
 
+        # 사전 선택된 훅 섹션
+        hook_section = ""
+        if hook:
+            hook_section = f"""## 사용할 훅 (반드시 이 훅으로 시작)
+다음 훅이 사전에 선택되었습니다. 포스트의 첫 부분을 반드시 이 훅으로 시작하세요:
+
+{hook}
+
+이 훅을 그대로 사용하되, 문맥에 맞게 미세 조정은 허용됩니다. 의미나 구조를 변경하지 마세요.
+"""
+
         return f"""당신은 LinkedIn 포스팅 전문가입니다. 다음 기사를 바탕으로 LinkedIn 포스트를 작성해주세요.
 
 ## 페르소나
@@ -440,7 +552,7 @@ class LinkedInService:
 
 {rules_section}
 {self._get_reference_examples(scenario)}
-## LinkedIn 포맷팅 규칙
+{hook_section}## LinkedIn 포맷팅 규칙
 - 줄바꿈으로 단락을 명확히 구분하세요
 - 짧은 문장을 사용하세요 (한 문장에 2줄 이상 금지)
 - 넘버링(1, 2, 3)을 활용하여 가독성을 높이세요

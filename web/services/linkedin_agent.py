@@ -54,6 +54,7 @@ class AgentSession:
     reference_examples: str = ""
     chat_messages: list = field(default_factory=list)
     draft_id: int = 0
+    hook: str = ""
 
 
 # Global session store
@@ -125,6 +126,7 @@ class LinkedInAgent:
         self,
         article_id: int,
         scenario: Optional[str] = None,
+        hook: Optional[str] = None,
     ) -> AsyncGenerator[str, None]:
         """
         Run the agent pipeline, yielding SSE events.
@@ -148,6 +150,7 @@ class LinkedInAgent:
             session_id=session_id,
             article_id=article_id,
             scenario=scenario,
+            hook=hook or "",
         )
         _sessions[session_id] = session
 
@@ -406,6 +409,18 @@ class LinkedInAgent:
         reference_section = self._get_reference_examples(session.scenario, guidelines)
         session.reference_examples = reference_section
 
+        # 훅 섹션 (사전 선택된 훅이 있는 경우)
+        hook_section = ""
+        if session.hook:
+            hook_section = f"""
+## 사용할 훅 (반드시 이 훅으로 시작)
+다음 훅이 사전에 선택되었습니다. 포스트의 첫 부분을 반드시 이 훅으로 시작하세요:
+
+{session.hook}
+
+이 훅을 그대로 사용하되, 문맥에 맞게 미세 조정은 허용됩니다. 의미나 구조를 변경하지 마세요.
+"""
+
         prompt = f"""다음 정보를 바탕으로 LinkedIn 포스트 초안을 작성해주세요.
 
 ## 기사 분석
@@ -427,7 +442,7 @@ class LinkedInAgent:
 ## 페르소나
 - VC 심사역 + ML 엔지니어 출신 AI 빌더
 - 최신 AI 기술과 시장 동향에 깊은 이해
-{reference_section}
+{reference_section}{hook_section}
 ## LinkedIn 포맷팅 규칙
 - 줄바꿈으로 단락을 명확히 구분하세요
 - 짧은 문장을 사용하세요 (한 문장에 2줄 이상 금지)
