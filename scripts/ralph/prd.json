@@ -1,161 +1,150 @@
 {
   "project": "AI Daily Digest",
   "branchName": "ralph/linkedin-quality-boost",
-  "description": "LinkedIn 포스팅 생성 품질 대폭 강화: 지침서 통합, 레퍼런스 활용, 시나리오 F 추가, 품질 게이트, 평가 기반 자동 재생성",
+  "description": "LinkedIn 좋은 글 쓰기 V2: 가이드라인 실제 반영, 레퍼런스 활용, 품질 검증, 반복 개선(채팅+편집), 훅 랩. 현재 치명적 버그(가이드라인 미반영, import json 누락)부터 수정 후 창작 워크플로우 구축.",
   "userStories": [
     {
-      "id": "LQ-001",
-      "title": "Add Scenario F and fix SCENARIOS dict",
-      "description": "지침서에 정의된 시나리오 F(권위자 관점 + 역설적 인사이트)를 코드에 추가하고, detect_scenario()에도 반영한다.",
+      "id": "V2-001",
+      "title": "Fix guidelines integration and import json bug",
+      "description": "_build_prompt()에 self.guidelines가 로드되지만 프롬프트에 포함되지 않는 치명적 버그 수정. 또한 import json 누락으로 chat_refine_by_draft()가 crash하는 버그도 수정.",
       "acceptanceCriteria": [
-        "web/services/linkedin_service.py의 SCENARIOS 딕셔너리에 F 추가 (name, description, hook_style, structure, closing - data/linkedin_guidelines.md의 시나리오 F 섹션 참고)",
-        "detect_scenario()에 시나리오 F 감지 키워드 추가 (권위자, expert, 통념, 학습, FOMO 등)",
-        "web/api/linkedin.py의 scenario Query 정규식을 ^[A-F]$로 변경",
-        "python -m py_compile web/services/linkedin_service.py web/api/linkedin.py 통과"
+        "web/services/linkedin_service.py 상단에 import json 추가",
+        "_build_prompt()에서 self.guidelines가 있으면 프롬프트에 '## LinkedIn 포스팅 지침서' 섹션으로 전문 포함",
+        "self.guidelines가 비어있으면 기존 하드코딩된 '## 공통 규칙' 섹션을 폴백으로 사용",
+        "프롬프트 구조 순서: 페르소나 → 시나리오 → 기사 정보 → 지침서(또는 폴백 규칙) → 출력 형식",
+        "generate_draft()에서 self.guidelines = self._load_guidelines() 호출하여 매번 최신 지침서 반영 (hot-reload)",
+        "python -m py_compile web/services/linkedin_service.py 통과"
       ],
       "priority": 1,
-      "passes": true,
-      "notes": "data/linkedin_guidelines.md에 시나리오 F가 이미 정의되어 있음. 코드에만 누락된 상태"
+      "passes": false,
+      "notes": "self.guidelines는 __init__에서 _load_guidelines()로 이미 로드됨 (line 65). _build_prompt()에서 사용만 하면 됨. import json은 chat_refine_by_draft() (line 244, 306)에서 json.loads/json.dumps 사용 중인데 import가 없어 crash함."
     },
     {
-      "id": "LQ-002",
-      "title": "Integrate full guidelines into simple mode prompt",
-      "description": "linkedin_service.py의 _build_prompt()에서 self.guidelines를 실제로 프롬프트에 포함시킨다. 현재 로드만 하고 사용하지 않는 치명적 버그 수정.",
+      "id": "V2-002",
+      "title": "Add Scenario F and reference posts as few-shot examples",
+      "description": "지침서에 정의된 시나리오 F를 코드에 추가하고, 레퍼런스 포스트를 프롬프트에 few-shot 예시로 포함한다.",
       "acceptanceCriteria": [
-        "_build_prompt()의 프롬프트 텍스트에 self.guidelines 전문을 포함하는 섹션 추가",
-        "guidelines가 비어있으면 기존 하드코딩된 규칙을 폴백으로 사용",
-        "프롬프트 구조: 페르소나 → 시나리오 → 기사 정보 → 지침서(guidelines) → 공통 규칙 → 출력 형식",
-        "기존 하드코딩된 공통 규칙 섹션은 guidelines가 없을 때만 사용하도록 분기",
-        "python -m py_compile 통과"
+        "SCENARIOS 딕셔너리에 F 추가: name='권위자 관점 + 역설적 인사이트', hook_style/structure/closing은 data/linkedin_guidelines.md의 시나리오 F 섹션 참고",
+        "detect_scenario()에 시나리오 F 감지 키워드 추가 (권위자, expert, 통념, 역설, 반전, conventional 등)",
+        "web/api/linkedin.py의 generate와 agent/start 엔드포인트의 scenario regex를 ^[A-F]$로 변경",
+        "LinkedInService에 _get_reference_examples(scenario) 메서드 추가: DB에서 ReferencePost 최대 2개 조회 + 지침서에서 해당 시나리오 예시 텍스트 추출",
+        "_build_prompt()에 '## 참고 예시' 섹션 추가: '다음은 좋은 포스팅 예시입니다. 이 스타일과 구조를 참고하되 그대로 따라하지 마세요:' 형태",
+        "레퍼런스가 없으면 참고 예시 섹션 생략",
+        "python -m py_compile web/services/linkedin_service.py web/api/linkedin.py 통과"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": "self.guidelines는 __init__에서 이미 로드됨 (line 64). _build_prompt()에서 사용만 하면 됨"
+      "passes": false,
+      "notes": "data/linkedin_guidelines.md에 시나리오 F와 각 시나리오별 예시가 있음. ReferencePost 모델은 web/models/reference_post.py에 있음 (content, author, source_url, analysis 필드). from web.models import ReferencePost로 import."
     },
     {
-      "id": "LQ-003",
-      "title": "Add reference posts as few-shot examples in prompts",
-      "description": "생성 시 해당 시나리오의 레퍼런스 포스팅과 지침서 예시를 few-shot 예시로 프롬프트에 포함한다.",
+      "id": "V2-003",
+      "title": "Enrich article context and score-based tone guidance",
+      "description": "프롬프트에 기사의 score, viral_score, category, source 등 메타데이터를 추가하고, 점수 기반 톤 가이드를 제공한다.",
       "acceptanceCriteria": [
-        "LinkedInService에 _get_reference_examples(scenario) 메서드 추가: DB에서 ReferencePost 최대 2개 + 지침서의 해당 시나리오 예시 추출",
-        "_build_prompt()에서 _get_reference_examples() 호출하여 '참고 예시' 섹션으로 프롬프트에 포함",
-        "예시는 '다음은 좋은 포스팅 예시입니다. 이 스타일과 구조를 참고하세요:' 형태로 포함",
-        "레퍼런스가 없으면 지침서 예시만, 지침서 예시도 없으면 섹션 생략",
-        "LinkedInAgent의 _step_draft()에도 동일하게 레퍼런스 예시 포함",
-        "python -m py_compile 통과"
+        "_build_prompt()의 '## 기사 정보' 섹션에 category, score, viral_score 추가",
+        "score 기반 톤 가이드 추가: score >= 8이면 '고품질 기사 - 깊은 기술적 분석과 구체적 인사이트를 제공하세요', score <= 5이면 '간결한 코멘터리와 핵심 시사점 중심으로 작성하세요'",
+        "viral_score가 있고 50 이상이면 '화제성 높은 뉴스 - 시의성과 논쟁 포인트를 활용하세요' 맥락 추가",
+        "source에 MIT, Stanford, Google, OpenAI, Anthropic 등 포함 시 '저명 기관/기업 출처 - 연구 권위와 신뢰도를 활용하세요' 가이드",
+        "linkedin_agent.py의 _step_analyze()와 _step_draft() 프롬프트에도 동일한 기사 메타데이터 추가",
+        "python -m py_compile web/services/linkedin_service.py web/services/linkedin_agent.py 통과"
       ],
       "priority": 3,
-      "passes": true,
-      "notes": "ReferencePost 모델은 web/models/reference_post.py에 있음. from web.models import ReferencePost로 import"
+      "passes": false,
+      "notes": "Article 모델에 score(float), viral_score(float), category(str), source(str) 필드 모두 존재. 없을 수 있으므로 None 체크 필요."
     },
     {
-      "id": "LQ-004",
-      "title": "Enrich article context in generation prompts",
-      "description": "프롬프트에 기사의 score, viral_score, category, source 등 풍부한 맥락을 추가하여 더 깊은 분석이 가능하게 한다.",
-      "acceptanceCriteria": [
-        "_build_prompt()에 기사 메타데이터 섹션 추가: category, score, viral_score, source",
-        "score 기반 톤 가이드 추가: 8+ 고품질 → 깊은 분석 권장, 5 이하 → 간결한 코멘터리 권장",
-        "viral_score 있으면 '화제성 높은 뉴스' 맥락 추가",
-        "source 기반 맥락: 'MIT/Stanford/Google 등 → 연구 권위 강조' 가이드",
-        "LinkedInAgent의 _step_analyze()와 _step_draft()에도 동일하게 반영",
-        "python -m py_compile 통과"
-      ],
-      "priority": 4,
-      "passes": true,
-      "notes": "Article 모델에 score, viral_score, category, source 필드 모두 존재"
-    },
-    {
-      "id": "LQ-005",
-      "title": "Add post-generation quality validation",
-      "description": "생성된 포스트의 글자수, 금지어 포함 여부, 원문 링크 유무를 자동 검증하는 유틸리티를 만들고, 검증 실패 시 자동 재생성한다.",
+      "id": "V2-004",
+      "title": "Post-generation quality validation with auto-retry",
+      "description": "생성된 포스트의 글자수, 금지어, 이모지, 원문 링크를 자동 검증하고, 실패 시 1회 자동 재생성한다.",
       "acceptanceCriteria": [
         "web/services/linkedin_service.py에 _validate_draft(content, article_url) 메서드 추가",
-        "검증 항목: (1) 글자수 1200-1800 범위 (2) 금지어 체크 (이모지, 여러분, 혁명, 패러다임 시프트, 게임체인저, ~하세요, ~해보세요, 읽어주셔서 감사) (3) 원문 링크 포함 여부",
-        "검증 결과를 dict로 반환: {valid: bool, issues: list[str], char_count: int}",
-        "generate_draft()에서 _validate_draft() 호출, 실패 시 이슈를 포함한 수정 프롬프트로 1회 재생성",
-        "최대 재생성 횟수 2회 (무한 루프 방지)",
-        "python -m py_compile 통과"
+        "검증 항목: (1) 글자수 1200-1800자 범위 (2) 금지어 체크: 이모지(regex), 여러분, 혁명, 패러다임 시프트, 게임체인저, ~하세요, ~해보세요 (3) 원문 링크 포함 여부",
+        "반환: dict {valid: bool, issues: list[str], char_count: int}",
+        "generate_draft()에서 생성 후 _validate_draft() 호출, 실패 시 issues를 포함한 수정 프롬프트로 재생성",
+        "수정 프롬프트: '다음 초안에 문제가 있습니다: [이슈 목록]. 이 문제를 수정한 최종 초안을 작성하세요. 원본 초안: [초안]'",
+        "최대 재생성 1회 (총 2회까지, 무한 루프 방지)",
+        "python -m py_compile web/services/linkedin_service.py 통과"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "금지어 목록은 data/linkedin_guidelines.md의 '금지 사항' 섹션 참고. 이모지 체크: re.compile(r'[\\U0001F600-\\U0001F64F\\U0001F300-\\U0001F5FF\\U0001F680-\\U0001F6FF\\U0001F1E0-\\U0001F1FF]')"
+    },
+    {
+      "id": "V2-005",
+      "title": "Agent mode: real checklist review + evaluation-driven retry",
+      "description": "Agent 모드의 Step 4(자기 검토)에서 하드코딩된 6개 항목 대신 Step 2의 가이드라인 체크리스트를 사용하고, Step 5(평가) 후 점수가 낮으면 자동 재생성한다.",
+      "acceptanceCriteria": [
+        "_step_review()에서 하드코딩된 '## 검토 항목' 1-6 목록 삭제 (session.guidelines_checklist가 이미 '## 적용 규칙'으로 포함되어 있으므로 중복 제거)",
+        "_step_review()에 사용자 피드백(session.user_feedback) '반드시 반영할 사항'으로 더 강하게 강조",
+        "_step_draft() 프롬프트에 레퍼런스 예시 포함 (V2-002의 _get_reference_examples 활용 또는 동일 로직 구현)",
+        "_step_evaluate() 후 overall_score < 70 또는 FAIL 항목 >= 3이면 자동 수정 진행",
+        "수정 프롬프트: FAIL 항목 명시 + 해당 부분만 수정 요청",
+        "수정 후 재평가 (최대 1회 추가 루프)",
+        "SSE 이벤트로 'retry_start' (재시도 시작), 'retry_complete' (재시도 완료) 전송",
+        "python -m py_compile web/services/linkedin_agent.py 통과"
       ],
       "priority": 5,
-      "passes": true,
-      "notes": "금지어 목록은 data/linkedin_guidelines.md의 '금지 사항' 섹션 참고"
+      "passes": false,
+      "notes": "_step_review() line 350-351에 session.guidelines_checklist가 이미 '## 적용 규칙'으로 포함되어 있으나, line 353-359에 별도 하드코딩된 '## 검토 항목'이 중복으로 존재. 하드코딩 부분만 제거하면 됨. evaluation JSON 구조: {overall_score: int, items: [{pass: bool, category, rule, comment}]}"
     },
     {
-      "id": "LQ-006",
-      "title": "Improve agent mode review step with guidelines-based checklist",
-      "description": "Agent 모드 Step 4(자기 검토)에서 하드코딩된 6개 항목 대신 Step 2에서 생성한 가이드라인 체크리스트를 실제로 활용한다.",
+      "id": "V2-006",
+      "title": "Chat + edit data layer: model columns, migration, API endpoints",
+      "description": "채팅 개선과 직접 편집을 위한 데이터 레이어를 구축한다. 모델 컬럼, 마이그레이션, API 엔드포인트를 추가한다.",
       "acceptanceCriteria": [
-        "linkedin_agent.py의 _step_review()에서 session.guidelines_checklist를 프롬프트에 포함",
-        "하드코딩된 '검토 항목 1-6' 제거, 대신 '다음 체크리스트의 모든 항목을 검증하고, 위반 사항을 반드시 수정하세요' 형태로 변경",
-        "사용자 피드백(session.user_feedback)도 '반드시 반영할 사항'으로 강조",
-        "python -m py_compile 통과"
+        "LinkedInDraft 모델에 chat_history 컬럼(Text, nullable) 추가 — JSON: [{role, content}]",
+        "LinkedInDraft 모델에 guidelines_checklist 컬럼(Text, nullable) 추가",
+        "LinkedInDraft.to_dict()에 chat_history, guidelines_checklist 포함",
+        "web/database.py migrate_db()에 chat_history, guidelines_checklist ALTER TABLE 추가",
+        "linkedin_agent.py의 _save_draft()에서 session.guidelines_checklist를 draft.guidelines_checklist에 저장",
+        "web/api/linkedin.py에 ContentUpdate Pydantic 모델이 없으면 추가: content(str)",
+        "web/api/linkedin.py에 PATCH /api/linkedin/drafts/{draft_id}/content 엔드포인트가 없으면 추가: draft_content 업데이트, 글자수 반환",
+        "기존 POST /api/linkedin/drafts/{draft_id}/chat 엔드포인트가 이미 존재하므로, chat_refine_by_draft()가 V2-001의 import json 추가 후 정상 동작하는지 확인",
+        "python -m py_compile web/models/linkedin_draft.py web/database.py web/api/linkedin.py web/services/linkedin_agent.py 통과"
       ],
       "priority": 6,
-      "passes": true,
-      "notes": "session.guidelines_checklist는 Step 2에서 생성됨"
+      "passes": false,
+      "notes": "chat_refine_by_draft()는 web/services/linkedin_service.py line 229에 이미 존재. draft.chat_history와 draft.guidelines_checklist를 참조하므로 컬럼 추가 후 정상 동작. POST /drafts/{draft_id}/chat 엔드포인트도 이미 web/api/linkedin.py line 260에 존재. ContentUpdate와 PATCH endpoint는 이전 세션에서 추가되었을 수 있음 — 먼저 확인 후 없으면 추가."
     },
     {
-      "id": "LQ-007",
-      "title": "Add evaluation-driven retry in agent mode",
-      "description": "Agent 모드 Step 5(평가) 결과가 70점 미만이거나 FAIL 항목이 3개 이상이면, 자동으로 수정 루프를 돌린다.",
+      "id": "V2-007",
+      "title": "Chat refinement + inline editor + char count frontend",
+      "description": "초안 하단에 채팅 인터페이스와 직접 편집기를 추가하고, 모든 초안에 글자수 배지를 표시한다.",
       "acceptanceCriteria": [
-        "_step_evaluate() 후 overall_score < 70 또는 FAIL 항목 >= 3이면 자동 수정 진행",
-        "수정 프롬프트: 평가 결과의 FAIL 항목을 명시하고 해당 부분만 수정 요청",
-        "수정 후 재평가 (최대 1회 추가 루프, 무한 방지)",
-        "SSE 이벤트로 'retry_start', 'retry_complete' 전송하여 프론트에서 진행 상태 표시",
-        "최종 결과(수정 전/후)를 모두 draft에 저장",
-        "python -m py_compile 통과"
+        "drafts-container의 각 초안 카드에 글자수 배지 표시: <1200 빨강, 1200-1400 노랑, 1400-1600 초록, 1600-1800 노랑, >1800 빨강",
+        "agent-result-panel의 최종 초안에도 글자수 배지 표시",
+        "각 초안 카드에 '채팅' 버튼 추가 — 클릭 시 해당 초안 하단에 채팅 UI 토글 (메시지 목록 + 입력창 + 전송 버튼)",
+        "채팅 UI: user 메시지(우측, 보라색 배경), assistant 메시지(좌측, 회색 배경), Enter키로 전송",
+        "전송 시 POST /api/linkedin/drafts/{draft_id}/chat → 응답으로 초안 텍스트 + 글자수 업데이트",
+        "각 초안 카드에 '편집' 버튼 추가 — 클릭 시 textarea로 전환 (현재 내용 채움)",
+        "textarea 하단에 실시간 글자수 카운터 (keyup 이벤트, 위와 같은 색상 코딩) + 저장/취소 버튼",
+        "저장 → PATCH /api/linkedin/drafts/{draft_id}/content → 성공 시 텍스트 표시로 복원",
+        "취소 → 원래 내용으로 복원",
+        "agent-result-panel에서도 동일한 채팅/편집 UI 표시"
       ],
       "priority": 7,
-      "passes": true,
-      "notes": "evaluation JSON 구조: {overall_score: int, items: [{pass: bool, ...}]}"
+      "passes": false,
+      "notes": "detail.html의 기존 패턴 활용: escapeHtml(), showToast(), copyToClipboard(), renderLinkedInPreview(). Tailwind CSS 사용. 채팅 UI는 채팅 버튼 클릭 시 동적 생성. V2-006에서 API가 준비된 후 프론트엔드만 구현."
     },
     {
-      "id": "LQ-008",
-      "title": "Upgrade scenario detection to Claude-based analysis",
-      "description": "detect_scenario()를 단순 키워드 매칭에서 Claude API 기반 분석으로 업그레이드한다.",
+      "id": "V2-008",
+      "title": "Hook Lab: generate multiple hooks before full draft",
+      "description": "LinkedIn 포스트에서 훅(첫 1-3줄)이 가장 중요하다. 풀 초안 생성 전에 3-5개 훅 옵션을 먼저 보여주고, 사용자가 선택한 훅으로 초안을 생성한다.",
       "acceptanceCriteria": [
-        "detect_scenario()에서 Claude API를 호출하여 기사 제목+요약을 분석, 최적 시나리오(A-F) + 근거를 반환",
-        "반환 형태: {scenario: str, confidence: float, reason: str}",
-        "API 호출 실패 시 기존 키워드 기반 로직으로 폴백",
-        "결과를 캐싱하여 같은 article_id에 대해 중복 호출 방지 (Article 모델에 detected_scenario 컬럼 추가 또는 인메모리 캐시)",
-        "web/app.py의 article_detail에서 reason도 템플릿에 전달",
-        "web/templates/articles/detail.html에서 추천 시나리오 옆에 근거 표시",
-        "python -m py_compile 통과"
+        "web/services/linkedin_service.py에 generate_hooks(article, scenario, count=5) 메서드 추가",
+        "Claude API로 기사+시나리오+가이드라인에 맞는 훅 5개 생성 — 각 훅은 1-3줄, 다른 접근법/스타일",
+        "반환: list[dict] — 각 {hook: str, style: str(숫자형/질문형/역설/선언/스토리), reasoning: str(왜 이 훅이 효과적인지)}",
+        "web/api/linkedin.py에 POST /api/linkedin/hooks/{article_id}?scenario=A 엔드포인트 추가",
+        "detail.html에 '훅 먼저 고르기' 버튼 추가 (시나리오 선택 후, 생성 전 위치)",
+        "클릭 시 훅 옵션을 카드 형태로 표시 — 각 카드: 훅 텍스트 + 스타일 배지 + LinkedIn 미리보기(renderLinkedInPreview 활용)",
+        "사용자가 훅 카드 클릭 시 선택 표시 → '이 훅으로 초안 생성' 버튼 활성화",
+        "generate_draft()에 hook 파라미터(Optional[str]) 추가 — 있으면 프롬프트에 '## 사용할 훅' 섹션으로 포함하여 이 훅으로 시작하도록 지시",
+        "agent_start에도 hook Query 파라미터 추가, _step_draft()에서 hook 전달",
+        "python -m py_compile web/services/linkedin_service.py web/api/linkedin.py 통과"
       ],
       "priority": 8,
-      "passes": true,
-      "notes": "비용 고려: claude-haiku 사용 권장. 시나리오 선택 가이드는 data/linkedin_guidelines.md 하단에 있음"
-    },
-    {
-      "id": "LQ-009",
-      "title": "Add guidelines hot-reload on each generation",
-      "description": "LinkedInService와 LinkedInAgent가 매 생성 시 지침서 파일을 새로 로드하여, 지침 학습 결과가 즉시 반영되도록 한다.",
-      "acceptanceCriteria": [
-        "LinkedInService.generate_draft()에서 self.guidelines = self._load_guidelines() 재호출",
-        "LinkedInAgent._step_guidelines_check()에서도 매번 파일에서 새로 로드",
-        "__init__에서의 로드는 유지 (초기값), 생성 시점에 refresh",
-        "python -m py_compile 통과"
-      ],
-      "priority": 9,
-      "passes": true,
-      "notes": "간단한 변경이지만, 지침 학습 시스템과의 연결고리로 중요"
-    },
-    {
-      "id": "LQ-010",
-      "title": "Enhance prompt formatting and length enforcement",
-      "description": "프롬프트에 LinkedIn 포맷팅 규칙과 강력한 길이 제약을 추가한다.",
-      "acceptanceCriteria": [
-        "프롬프트에 LinkedIn 포맷팅 가이드 추가: 줄바꿈으로 단락 구분, 짧은 문장, 넘버링 활용, 구분선(ㅡ) 활용",
-        "길이 제약 강화: '반드시 1200자 이상 1800자 이하로 작성. 이상적 길이는 1400-1600자. 이 범위를 벗어나면 조절하세요'",
-        "출력 형식 명시: '제목/헤더 없이 본문만 출력. 첫 줄이 곧 훅. 마지막에 원문 링크 한 줄'",
-        "anti-pattern 명시: '다음과 같이 작성하지 마세요: (1) 너무 일반적인 서론 (2) ~에 대해 이야기하겠습니다 (3) 결론적으로~ (4) 요약하면~'",
-        "simple 모드와 agent 모드 양쪽에 적용",
-        "python -m py_compile 통과"
-      ],
-      "priority": 10,
-      "passes": true,
-      "notes": "data/linkedin_guidelines.md의 공통 규칙, 권장 사항 섹션 참고"
+      "passes": false,
+      "notes": "LinkedIn '더보기' 접힘점: 약 210자 또는 줄바꿈 3번째. renderLinkedInPreview() 함수가 이미 detail.html에 있으므로 훅 미리보기에 재활용. 훅 스타일 분류는 가이드라인의 시나리오별 hook_style 참고."
     }
   ]
 }
