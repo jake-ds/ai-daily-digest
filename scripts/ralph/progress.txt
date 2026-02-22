@@ -11,6 +11,8 @@ Started: 2026년 2월 22일 일요일 11시 40분 59초 KST
 - chat_refine() in linkedin_agent.py is session-based; chat_refine_by_draft() in linkedin_service.py is draft-based (works after page refresh)
 - LinkedInDraft stores agent-mode context: analysis, direction, review_notes, evaluation, guidelines_checklist, chat_history
 - Agent sessions are in-memory (AgentSession dataclass in linkedin_agent.py); drafts persist in SQLite
+- Draft card UI pattern: buttons in header div, toggleable panels (edit/chat) below draft content, per-draft JS with draftId parameter
+- Agent result panel chat falls back to draft-based if session expired (agentSessionId null, agentDraftId set)
 
 ---
 
@@ -27,4 +29,23 @@ Started: 2026년 2월 22일 일요일 11시 40분 59초 KST
   - PRD noted chat_refine_by_draft() already existed — it did not; had to create it from scratch
   - The draft-based chat loads guidelines_checklist, analysis, and chat_history from the draft record for context
   - ChatMessage pydantic model was already defined and reused for the new endpoint
+---
+
+## 2026-02-22 - V2-007
+- What was implemented: Draft-based chat frontend + inline edit for existing draft cards in drafts-container
+- Files changed:
+  - web/templates/articles/detail.html — added chat/edit buttons, inline edit panel, draft chat panel, char count badges, JS functions, agent chat fallback to draft-based
+- Features added:
+  - Each draft card now has 편집(edit) and 채팅(chat) buttons
+  - Inline edit panel per draft: startDraftEdit/saveDraftEdit/cancelDraftEdit → PATCH /api/linkedin/drafts/{draft_id}/content
+  - Draft chat panel per draft: toggleDraftChat/sendDraftChat → POST /api/linkedin/drafts/{draft_id}/chat
+  - Char count badge on each draft card, initialized on page load
+  - Existing chat_history rendered when chat panel is opened
+  - Agent result panel's sendChatMessage() falls back to draft-based chat when session is expired
+- **Learnings for future iterations:**
+  - All API endpoints (draft chat, draft content update) were already implemented in V2-006 — this was purely frontend work
+  - draftChatHistories object is populated from Jinja2 template loop using draft.chat_history | tojson
+  - getCharCountClass/getCharCountLabel helpers are shared between draft edit and agent edit
+  - agent-result-panel chat checks agentSessionId first, then falls back to agentDraftId for draft-based chat
+  - Template-only changes don't need py_compile
 ---

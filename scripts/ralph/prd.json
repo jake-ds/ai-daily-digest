@@ -108,8 +108,8 @@
         "페이지 로드 시 기존 chat_history가 있는 초안은 채팅 이력 렌더링"
       ],
       "priority": 7,
-      "passes": false,
-      "notes": "이미 존재하는 것: agent-result-panel의 채팅 UI(sendChatMessage, session 기반), 인라인 편집(toggleAgentEditor/saveAgentEditor), 글자수 배지(getCharCountClasses/updateCharCountBadge). 기존 패턴(toggleDraftChat, sendDraftChat, startInlineEdit 등)이 progress.txt에 기록되어 있으나 현재 detail.html에 실제로 있는지 확인 필요."
+      "passes": true,
+      "notes": "구현 완료: 초안 카드에 편집/채팅 버튼 + 인라인 편집 패널(startDraftEdit/saveDraftEdit) + 드래프트 기반 채팅 패널(toggleDraftChat/sendDraftChat) + 글자수 배지 + 기존 chat_history 렌더링 + agent chat → draft chat 폴백."
     },
     {
       "id": "V2-008",
