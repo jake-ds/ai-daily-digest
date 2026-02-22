@@ -27,6 +27,7 @@ class LinkedInDraft(Base):
     evaluation = Column(Text, nullable=True)        # 가이드라인 평가 JSON
     user_feedback = Column(Text, nullable=True)     # 사용자 피드백 JSON
     iteration_count = Column(Integer, default=1)    # 검토 반복 횟수
+    chat_history = Column(Text, nullable=True)      # JSON: [{role, content, timestamp}]
 
     # 포스팅 상태 관련
     status = Column(String(20), default="draft")    # "draft" | "final" | "published"
@@ -55,6 +56,7 @@ class LinkedInDraft(Base):
             "evaluation": self.evaluation,
             "user_feedback": self.user_feedback,
             "iteration_count": self.iteration_count or 1,
+            "chat_history": self.chat_history,
             "status": self.status or "draft",
             "linkedin_url": self.linkedin_url,
             "published_at": self.published_at.isoformat() if self.published_at else None,

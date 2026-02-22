@@ -21,6 +21,14 @@ class AgentInputData(BaseModel):
     feedback: Optional[str] = None
 
 
+class ChatMessage(BaseModel):
+    message: str
+
+
+class ContentUpdate(BaseModel):
+    content: str
+
+
 class PostUpdate(BaseModel):
     status: Optional[str] = None
     linkedin_url: Optional[str] = None
@@ -268,3 +276,44 @@ async def finalize_draft(
     db.refresh(draft)
 
     return {"success": True, "post": draft.to_dict()}
+
+
+# --- Chat & Edit endpoints ---
+
+@router.post("/agent/{session_id}/chat")
+async def agent_chat(
+    session_id: str,
+    data: ChatMessage,
+    db: Session = Depends(get_db),
+):
+    """Send a chat message to refine the agent's draft."""
+    from web.services.linkedin_agent import get_session, LinkedInAgent
+
+    session = get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    if session.status != "completed":
+        raise HTTPException(status_code=400, detail=f"Session not completed (status: {session.status})")
+
+    agent = LinkedInAgent(db)
+    result = agent.chat_refine(session, data.message)
+
+    return result
+
+
+@router.patch("/drafts/{draft_id}/content")
+async def update_draft_content(
+    draft_id: int,
+    data: ContentUpdate,
+    db: Session = Depends(get_db),
+):
+    """Directly update draft content (manual edit)."""
+    draft = db.query(LinkedInDraft).filter(LinkedInDraft.id == draft_id).first()
+    if not draft:
+        raise HTTPException(status_code=404, detail="Draft not found")
+
+    draft.draft_content = data.content
+    db.commit()
+
+    return {"success": True, "char_count": len(data.content)}

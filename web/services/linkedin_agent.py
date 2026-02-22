@@ -49,6 +49,11 @@ class AgentSession:
     # asyncio.Event for user input synchronization
     input_event: asyncio.Event = field(default_factory=asyncio.Event)
     input_data: dict = field(default_factory=dict)
+    # 참고자료 및 채팅
+    guidelines_raw: str = ""
+    reference_examples: str = ""
+    chat_messages: list = field(default_factory=list)
+    draft_id: int = 0
 
 
 # Global session store
@@ -227,6 +232,7 @@ class LinkedInAgent:
 
             # Save to database
             draft_record = self._save_draft(session, article)
+            session.draft_id = draft_record.id
 
             session.status = "completed"
             yield self._sse("agent_complete", {
@@ -288,7 +294,10 @@ class LinkedInAgent:
 
         analysis = await self._call_claude_streaming(prompt, session, step=0)
         session.analysis = analysis
-        yield self._sse("step_complete", {"step": 0, "content": analysis})
+        yield self._sse("step_complete", {
+            "step": 0, "content": analysis,
+            "reference_data": {"article_context": article_context},
+        })
 
     async def _step_directions(self, session: AgentSession, article: Article, scenario_info: dict) -> AsyncGenerator[str, None]:
         """Step 1: Suggest 3 directions and wait for user choice."""
@@ -320,7 +329,16 @@ class LinkedInAgent:
 
         directions = await self._call_claude_streaming(prompt, session, step=1)
         session.directions = directions
-        yield self._sse("step_complete", {"step": 1, "content": directions})
+        yield self._sse("step_complete", {
+            "step": 1, "content": directions,
+            "reference_data": {
+                "scenario_info": {
+                    "hook_style": scenario_info.get("hook_style", ""),
+                    "structure": scenario_info.get("structure", ""),
+                    "closing": scenario_info.get("closing", ""),
+                },
+            },
+        })
 
         # Wait for user input
         session.status = "waiting"
@@ -374,7 +392,11 @@ class LinkedInAgent:
 
         checklist = await self._call_claude_streaming(prompt, session, step=2)
         session.guidelines_checklist = checklist
-        yield self._sse("step_complete", {"step": 2, "content": checklist})
+        session.guidelines_raw = guidelines_text
+        yield self._sse("step_complete", {
+            "step": 2, "content": checklist,
+            "reference_data": {"guidelines_text": guidelines_text},
+        })
 
     async def _step_draft(self, session: AgentSession, article: Article, scenario_info: dict, guidelines: str) -> AsyncGenerator[str, None]:
         """Step 3: Write the draft."""
@@ -382,6 +404,7 @@ class LinkedInAgent:
         yield self._sse("step_start", {"step": 3, "name": "초안 작성"})
 
         reference_section = self._get_reference_examples(session.scenario, guidelines)
+        session.reference_examples = reference_section
 
         prompt = f"""다음 정보를 바탕으로 LinkedIn 포스트 초안을 작성해주세요.
 
@@ -428,7 +451,10 @@ class LinkedInAgent:
 
         draft = await self._call_claude_streaming(prompt, session, step=3)
         session.draft = draft
-        yield self._sse("step_complete", {"step": 3, "content": draft})
+        yield self._sse("step_complete", {
+            "step": 3, "content": draft,
+            "reference_data": {"reference_examples": reference_section},
+        })
 
         # Wait for user feedback
         session.status = "waiting"
@@ -622,6 +648,62 @@ JSON만 출력하세요. 다른 설명은 불필요합니다."""
         self.db.commit()
         self.db.refresh(draft)
         return draft
+
+    def chat_refine(self, session: AgentSession, user_message: str) -> dict:
+        """Refine draft via chat message. Returns updated draft and chat history."""
+        import time as _time
+
+        current_draft = session.improved_draft or session.draft
+
+        # Build chat context
+        chat_context = ""
+        for msg in session.chat_messages:
+            role_label = "사용자" if msg["role"] == "user" else "어시스턴트"
+            chat_context += f"\n[{role_label}]: {msg['content']}\n"
+
+        prompt = f"""다음 LinkedIn 포스트를 사용자의 요청에 따라 수정해주세요.
+
+## 현재 초안
+{current_draft}
+
+## 기사 분석
+{session.analysis}
+
+## 적용된 가이드라인 체크리스트
+{session.guidelines_checklist}
+{f'''
+## 이전 대화
+{chat_context}
+''' if chat_context else ''}
+## 사용자 요청
+{user_message}
+
+## 중요
+- 사용자의 요청사항만 반영하고, 나머지는 그대로 유지하세요
+- LinkedIn 포스트 본문만 출력하세요
+- 설명 없이 바로 사용 가능한 형태
+- 1200자 이상 1800자 이하 유지"""
+
+        revised = self._call_claude_sync(prompt)
+
+        # Update session
+        session.improved_draft = revised
+        timestamp = _time.strftime("%Y-%m-%d %H:%M:%S")
+        session.chat_messages.append({"role": "user", "content": user_message, "timestamp": timestamp})
+        session.chat_messages.append({"role": "assistant", "content": f"수정 완료 ({len(revised)}자)", "timestamp": timestamp})
+
+        # Update DB
+        draft_record = self.db.query(LinkedInDraft).filter(LinkedInDraft.id == session.draft_id).first()
+        if draft_record:
+            draft_record.draft_content = revised
+            draft_record.chat_history = json.dumps(session.chat_messages, ensure_ascii=False)
+            self.db.commit()
+
+        return {
+            "revised_draft": revised,
+            "char_count": len(revised),
+            "chat_history": session.chat_messages,
+        }
 
     def _sse(self, event: str, data: dict) -> str:
         """Format an SSE event string."""

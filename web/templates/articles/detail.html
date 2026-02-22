@@ -46,6 +46,34 @@
     /* Evaluation table styles */
     .eval-pass { color: #16a34a; }
     .eval-fail { color: #dc2626; }
+
+    /* Reference data toggle */
+    .ref-data-content {
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.3s ease;
+    }
+    .ref-data-content.expanded {
+        max-height: 10000px;
+    }
+
+    /* Chat messages */
+    .chat-msg-user {
+        background: #ede9fe;
+        border-radius: 12px 12px 0 12px;
+        margin-left: auto;
+        max-width: 80%;
+    }
+    .chat-msg-assistant {
+        background: #f3f4f6;
+        border-radius: 12px 12px 12px 0;
+        max-width: 80%;
+    }
+
+    /* Char counter colors */
+    .char-danger { color: #dc2626; }
+    .char-warning { color: #d97706; }
+    .char-ideal { color: #16a34a; }
 </style>
 {% endblock %}
 
@@ -240,6 +268,79 @@
             </div>
         </div>
 
+        <!-- Agent Result Panel (shown after agent completes, replaces page reload) -->
+        <div id="agent-result-panel" class="hidden mb-6 space-y-4">
+            <!-- Final Draft Display -->
+            <div class="border rounded-lg overflow-hidden">
+                <div class="bg-green-50 px-4 py-3 border-b flex items-center justify-between">
+                    <span class="text-green-700 font-semibold">최종 초안</span>
+                    <div class="flex items-center gap-2">
+                        <span id="agent-draft-char-count" class="text-xs text-gray-500"></span>
+                        <button onclick="copyToClipboard(document.getElementById('agent-final-draft').innerText)"
+                                class="px-3 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300">
+                            복사
+                        </button>
+                        <button onclick="toggleAgentEditor()"
+                                class="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200">
+                            직접 편집
+                        </button>
+                        <button onclick="finalizeAgentDraft()"
+                                class="px-3 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200">
+                            확정
+                        </button>
+                    </div>
+                </div>
+                <div class="p-4">
+                    <div id="agent-final-draft" class="prose prose-sm max-w-none whitespace-pre-wrap text-gray-800"></div>
+                </div>
+            </div>
+
+            <!-- Direct Editor (hidden by default) -->
+            <div id="agent-editor-panel" class="hidden border rounded-lg overflow-hidden">
+                <div class="bg-blue-50 px-4 py-3 border-b">
+                    <span class="text-blue-700 font-semibold">직접 편집</span>
+                </div>
+                <div class="p-4">
+                    <textarea id="agent-editor-textarea" rows="15"
+                        class="w-full text-sm border rounded-lg p-3 focus:ring-2 focus:ring-blue-300 focus:border-blue-400"
+                        oninput="updateEditorCharCount()"></textarea>
+                    <div class="flex items-center justify-between mt-2">
+                        <span id="editor-char-counter" class="text-sm font-medium"></span>
+                        <div class="flex gap-2">
+                            <button onclick="cancelAgentEditor()"
+                                    class="px-4 py-1.5 bg-gray-200 text-gray-700 text-sm rounded hover:bg-gray-300">
+                                취소
+                            </button>
+                            <button onclick="saveAgentEditor()"
+                                    class="px-4 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700">
+                                저장
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chat Interface -->
+            <div class="border rounded-lg overflow-hidden">
+                <div class="bg-purple-50 px-4 py-3 border-b">
+                    <span class="text-purple-700 font-semibold">채팅으로 개선</span>
+                </div>
+                <div class="p-4">
+                    <div id="chat-messages" class="space-y-3 mb-4 max-h-80 overflow-y-auto"></div>
+                    <div class="flex gap-2">
+                        <input type="text" id="chat-input"
+                            class="flex-1 text-sm border rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-300 focus:border-purple-400"
+                            placeholder="수정 요청을 입력하세요... (예: 훅을 더 강렬하게)"
+                            onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault();sendChatMessage()}">
+                        <button onclick="sendChatMessage()" id="chat-send-btn"
+                                class="px-4 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 disabled:opacity-50">
+                            전송
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Drafts Container -->
         <div id="drafts-container" class="mt-6 space-y-4">
             {% for draft in drafts|sort(attribute='version', reverse=true) %}
@@ -327,7 +428,9 @@ try { draftEvaluations[{{ draft.id }}] = JSON.parse({{ draft.evaluation | tojson
 
 // Agent state
 let agentSessionId = null;
+let agentDraftId = null;
 let eventSource = null;
+let stepReferenceData = {};
 
 // Mark as read on page load
 document.addEventListener('DOMContentLoaded', function() {
@@ -457,6 +560,9 @@ function handleAgentEvent(event, data) {
             break;
 
         case 'step_complete':
+            if (data.reference_data) {
+                stepReferenceData[data.step] = data.reference_data;
+            }
             completeStep(data.step, data.content);
             break;
 
@@ -551,6 +657,26 @@ function completeStep(stepId, content) {
         }
     } else {
         textEl.textContent = content;
+    }
+
+    // Add reference data toggle if available
+    const refData = stepReferenceData[stepId];
+    if (refData) {
+        const refKey = Object.keys(refData)[0];
+        const refContent = typeof refData[refKey] === 'string' ? refData[refKey] : JSON.stringify(refData[refKey], null, 2);
+        if (refContent && refContent.length > 0) {
+            const refId = `ref-data-${stepId}`;
+            const refHtml = `
+                <div class="mt-2 border-t pt-2">
+                    <button onclick="document.getElementById('${refId}').classList.toggle('expanded')" class="text-xs text-purple-600 hover:text-purple-800">
+                        참고 자료 보기
+                    </button>
+                    <div id="${refId}" class="ref-data-content">
+                        <pre class="mt-1 p-2 bg-gray-50 border rounded text-xs text-gray-600 whitespace-pre-wrap overflow-x-auto max-h-96 overflow-y-auto">${escapeHtml(refContent)}</pre>
+                    </div>
+                </div>`;
+            textEl.insertAdjacentHTML('afterend', refHtml);
+        }
     }
 
     // Make collapsible
@@ -659,10 +785,25 @@ function handleAgentComplete(data) {
     document.getElementById('agent-btn').disabled = false;
     document.getElementById('generate-btn').disabled = false;
 
-    showToast('Agent 모드 완료! 최종 초안이 저장되었습니다.', 'success');
+    agentDraftId = data.draft_id;
 
-    // Reload page to show new draft
-    setTimeout(() => location.reload(), 1500);
+    // Show result panel inline
+    const resultPanel = document.getElementById('agent-result-panel');
+    const draftDisplay = document.getElementById('agent-final-draft');
+    const charCount = document.getElementById('agent-draft-char-count');
+
+    draftDisplay.textContent = data.final_draft;
+    charCount.textContent = `${data.final_draft.length}자`;
+    resultPanel.classList.remove('hidden');
+
+    // Collapse step details
+    for (let i = 0; i <= 5; i++) {
+        const contentEl = document.getElementById(`step-content-${i}`);
+        if (contentEl) contentEl.classList.remove('expanded');
+    }
+
+    resultPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    showToast('Agent 모드 완료! 최종 초안이 저장되었습니다.', 'success');
 }
 
 function handleAgentError(data) {
@@ -771,6 +912,161 @@ document.body.addEventListener('htmx:afterSwap', function(evt) {
     }
 });
 
+// --- Chat ---
+
+async function sendChatMessage() {
+    if (!agentSessionId) return;
+
+    const input = document.getElementById('chat-input');
+    const msg = input.value.trim();
+    if (!msg) return;
+
+    const sendBtn = document.getElementById('chat-send-btn');
+    sendBtn.disabled = true;
+    input.value = '';
+
+    // Add user message to UI
+    appendChatMessage('user', msg);
+
+    // Show loading
+    const loadingId = 'chat-loading-' + Date.now();
+    const messagesEl = document.getElementById('chat-messages');
+    messagesEl.insertAdjacentHTML('beforeend', `<div id="${loadingId}" class="flex"><div class="chat-msg-assistant px-3 py-2 text-sm text-gray-500">수정 중...</div></div>`);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+
+    try {
+        const resp = await fetch(`/api/linkedin/agent/${agentSessionId}/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: msg }),
+        });
+
+        const data = await resp.json();
+        document.getElementById(loadingId)?.remove();
+
+        if (resp.ok) {
+            appendChatMessage('assistant', `수정 완료 (${data.char_count}자)`);
+            // Update draft display
+            document.getElementById('agent-final-draft').textContent = data.revised_draft;
+            document.getElementById('agent-draft-char-count').textContent = `${data.char_count}자`;
+        } else {
+            appendChatMessage('assistant', `오류: ${data.detail || '알 수 없는 오류'}`);
+        }
+    } catch (e) {
+        document.getElementById(loadingId)?.remove();
+        appendChatMessage('assistant', `오류: ${e.message}`);
+    }
+
+    sendBtn.disabled = false;
+    input.focus();
+}
+
+function appendChatMessage(role, content) {
+    const messagesEl = document.getElementById('chat-messages');
+    const cssClass = role === 'user' ? 'chat-msg-user' : 'chat-msg-assistant';
+    const align = role === 'user' ? 'justify-end' : 'justify-start';
+    messagesEl.insertAdjacentHTML('beforeend',
+        `<div class="flex ${align}"><div class="${cssClass} px-3 py-2 text-sm">${escapeHtml(content)}</div></div>`
+    );
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+// --- Direct Editor ---
+
+function toggleAgentEditor() {
+    const panel = document.getElementById('agent-editor-panel');
+    const textarea = document.getElementById('agent-editor-textarea');
+
+    if (panel.classList.contains('hidden')) {
+        textarea.value = document.getElementById('agent-final-draft').textContent;
+        panel.classList.remove('hidden');
+        updateEditorCharCount();
+        textarea.focus();
+    } else {
+        panel.classList.add('hidden');
+    }
+}
+
+function cancelAgentEditor() {
+    document.getElementById('agent-editor-panel').classList.add('hidden');
+}
+
+async function saveAgentEditor() {
+    if (!agentDraftId) return;
+
+    const content = document.getElementById('agent-editor-textarea').value;
+
+    try {
+        const resp = await fetch(`/api/linkedin/drafts/${agentDraftId}/content`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: content }),
+        });
+
+        if (resp.ok) {
+            const data = await resp.json();
+            document.getElementById('agent-final-draft').textContent = content;
+            document.getElementById('agent-draft-char-count').textContent = `${data.char_count}자`;
+            document.getElementById('agent-editor-panel').classList.add('hidden');
+            showToast('저장 완료', 'success');
+        } else {
+            showToast('저장 실패', 'error');
+        }
+    } catch (e) {
+        showToast('저장 오류', 'error');
+    }
+}
+
+function updateEditorCharCount() {
+    const textarea = document.getElementById('agent-editor-textarea');
+    const counter = document.getElementById('editor-char-counter');
+    const len = textarea.value.length;
+
+    let colorClass, label;
+    if (len < 1200) {
+        colorClass = 'char-danger';
+        label = '너무 짧음';
+    } else if (len < 1400) {
+        colorClass = 'char-warning';
+        label = '짧음';
+    } else if (len <= 1600) {
+        colorClass = 'char-ideal';
+        label = '이상적 범위';
+    } else if (len <= 1800) {
+        colorClass = 'char-warning';
+        label = '약간 김';
+    } else {
+        colorClass = 'char-danger';
+        label = '너무 김';
+    }
+
+    counter.innerHTML = `<span class="${colorClass}">${len}자 (${label})</span>`;
+}
+
+async function finalizeAgentDraft() {
+    if (!agentDraftId) return;
+
+    try {
+        const resp = await fetch(`/api/linkedin/drafts/${agentDraftId}/finalize`, { method: 'POST' });
+        if (resp.ok) {
+            showToast('확정 완료!', 'success');
+            setTimeout(() => location.reload(), 500);
+        } else {
+            showToast('확정 실패', 'error');
+        }
+    } catch (e) {
+        showToast('확정 오류', 'error');
+    }
+}
+
+// --- Utility ---
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
 // Keyboard shortcuts for article detail page
 document.addEventListener('keydown', function(e) {
     // Skip if in input
@@ -778,8 +1074,12 @@ document.addEventListener('keydown', function(e) {
 
     switch(e.key) {
         case 'Escape':
+            // Close editor if open
+            if (!document.getElementById('agent-editor-panel').classList.contains('hidden')) {
+                cancelAgentEditor();
+            }
             // Close agent workspace if open, else go back
-            if (!document.getElementById('agent-workspace').classList.contains('hidden')) {
+            else if (!document.getElementById('agent-workspace').classList.contains('hidden')) {
                 closeAgentWorkspace();
             } else {
                 window.location.href = '/articles';

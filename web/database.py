@@ -48,6 +48,7 @@ def migrate_db():
             "status": "VARCHAR(20) DEFAULT 'draft'",
             "linkedin_url": "TEXT",
             "published_at": "DATETIME",
+            "chat_history": "TEXT",
         }
         with engine.begin() as conn:
             for col_name, col_type in new_columns.items():

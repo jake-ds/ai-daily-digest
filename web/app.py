@@ -95,7 +95,7 @@ async def articles_list(
     request: Request,
     q: Optional[str] = None,
     category: Optional[str] = None,
-    date_range: Optional[str] = None,
+    date_range: Optional[str] = "today",
     min_score: Optional[float] = None,
     favorite: Optional[str] = None,
     unread: Optional[str] = None,
