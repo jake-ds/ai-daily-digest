@@ -113,6 +113,26 @@
         font-size: 11px;
         font-weight: 600;
     }
+
+    /* Scorecard styles */
+    .scorecard-score-circle {
+        width: 72px; height: 72px;
+        border-radius: 50%;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        font-weight: 700;
+    }
+    .scorecard-score-circle .score-number { font-size: 28px; line-height: 1; }
+    .scorecard-score-circle .score-label { font-size: 10px; opacity: 0.8; }
+    .scorecard-score-circle.score-green { background: #dcfce7; color: #15803d; }
+    .scorecard-score-circle.score-yellow { background: #fef9c3; color: #a16207; }
+    .scorecard-score-circle.score-red { background: #fee2e2; color: #b91c1c; }
+    .scorecard-category { border-left: 3px solid #e5e7eb; padding-left: 12px; }
+    .scorecard-category.cat-pass { border-color: #22c55e; }
+    .scorecard-category.cat-fail { border-color: #ef4444; }
+    .scorecard-category.cat-mixed { border-color: #f59e0b; }
+    .scorecard-item-pass { color: #16a34a; }
+    .scorecard-item-fail { color: #dc2626; }
 </style>
 {% endblock %}
 
@@ -428,6 +448,9 @@
                 </div>
             </div>
 
+            <!-- Agent Evaluation Scorecard (auto-rendered after agent completes) -->
+            <div id="agent-scorecard-panel" class="hidden"></div>
+
             <!-- Chat Interface -->
             <div class="border rounded-lg overflow-hidden">
                 <div class="bg-purple-50 px-4 py-3 border-b">
@@ -470,6 +493,12 @@
                     </div>
                     <div class="flex items-center space-x-2">
                         <span class="text-xs" id="draft-char-badge-{{ draft.id }}"></span>
+                        {% if draft.evaluation %}
+                        <button onclick="toggleScorecard({{ draft.id }})"
+                                class="px-3 py-1 text-xs bg-indigo-100 text-indigo-700 rounded hover:bg-indigo-200">
+                            평가
+                        </button>
+                        {% endif %}
                         <button onclick="copyToClipboard(document.getElementById('draft-{{ draft.id }}').innerText)"
                                 class="px-3 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300">
                             Copy
@@ -541,12 +570,8 @@
                 </div>
 
                 {% if draft.evaluation %}
-                <div class="mt-3 pt-3 border-t">
-                    <button onclick="toggleEvaluation({{ draft.id }})" class="text-sm text-purple-600 hover:text-purple-800">
-                        가이드라인 평가 보기
-                    </button>
-                    <div id="eval-{{ draft.id }}" class="hidden mt-2"></div>
-                </div>
+                <!-- Scorecard panel (hidden by default, toggled by 평가 button) -->
+                <div id="scorecard-{{ draft.id }}" class="hidden mt-3 pt-3 border-t"></div>
                 {% endif %}
 
                 <div class="mt-2 text-xs text-gray-400">
@@ -817,10 +842,11 @@ function completeStep(stepId, content) {
         indicator.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>';
     }
 
-    // For step 5 (evaluation), render as table
+    // For step 5 (evaluation), render scorecard summary and store data
     if (stepId === 5) {
         try {
             const evalData = JSON.parse(content);
+            agentEvalData = evalData;
             textEl.innerHTML = renderEvaluationTable(evalData);
         } catch {
             textEl.textContent = content;
@@ -966,6 +992,13 @@ function handleAgentComplete(data) {
     charCount.textContent = `${data.final_draft.length}자`;
     resultPanel.classList.remove('hidden');
 
+    // Auto-render evaluation scorecard from step 5 data
+    if (agentEvalData) {
+        const scorecardPanel = document.getElementById('agent-scorecard-panel');
+        scorecardPanel.classList.remove('hidden');
+        renderEvaluationScorecard(agentEvalData, 'agent-scorecard-panel');
+    }
+
     // Collapse step details
     for (let i = 0; i <= 5; i++) {
         const contentEl = document.getElementById(`step-content-${i}`);
@@ -1007,53 +1040,119 @@ function appendStepContent(stepId, content) {
     if (textEl) textEl.textContent += content;
 }
 
-// --- Evaluation ---
+// --- Evaluation Scorecard ---
 
-function renderEvaluationTable(evalData) {
-    if (evalData.error) return `<p class="text-red-500">${evalData.error}</p>`;
+let agentEvalData = null; // stored from step 5 for agent result panel
 
-    let html = `<div class="mt-2">
-        <div class="flex items-center mb-2">
-            <span class="text-sm font-medium">종합 점수: </span>
-            <span class="ml-2 px-2 py-0.5 text-sm font-bold rounded ${evalData.overall_score >= 80 ? 'bg-green-100 text-green-700' : evalData.overall_score >= 60 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}">${evalData.overall_score}점</span>
-        </div>
-        <table class="w-full text-sm border">
-            <thead><tr class="bg-gray-50">
-                <th class="px-3 py-1.5 text-left border">카테고리</th>
-                <th class="px-3 py-1.5 text-left border">규칙</th>
-                <th class="px-3 py-1.5 text-center border">결과</th>
-                <th class="px-3 py-1.5 text-left border">코멘트</th>
-            </tr></thead><tbody>`;
+function renderEvaluationScorecard(evalData, containerId) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
 
-    if (evalData.items) {
-        evalData.items.forEach(item => {
-            html += `<tr>
-                <td class="px-3 py-1.5 border text-gray-600">${item.category}</td>
-                <td class="px-3 py-1.5 border">${item.rule}</td>
-                <td class="px-3 py-1.5 border text-center">${item.pass ? '<span class="eval-pass font-bold">PASS</span>' : '<span class="eval-fail font-bold">FAIL</span>'}</td>
-                <td class="px-3 py-1.5 border text-gray-600">${item.comment}</td>
-            </tr>`;
-        });
+    const data = typeof evalData === 'string' ? JSON.parse(evalData) : evalData;
+    if (data.error) {
+        container.innerHTML = `<p class="text-red-500 text-sm">${escapeHtml(data.error)}</p>`;
+        return;
     }
 
-    html += `</tbody></table>`;
-    if (evalData.summary) html += `<p class="mt-2 text-sm text-gray-600">${evalData.summary}</p>`;
+    const score = data.overall_score || 0;
+    const scoreColorClass = score >= 80 ? 'score-green' : score >= 60 ? 'score-yellow' : 'score-red';
+
+    // Group items by category
+    const groups = {};
+    const categoryOrder = ['문체', '구조', '금지', '형식'];
+    (data.items || []).forEach(item => {
+        if (!groups[item.category]) groups[item.category] = [];
+        groups[item.category].push(item);
+    });
+
+    // Score header
+    let html = `<div class="p-4 space-y-4">
+        <div class="flex items-center gap-4">
+            <div class="scorecard-score-circle ${scoreColorClass}">
+                <span class="score-number">${score}</span>
+                <span class="score-label">점</span>
+            </div>
+            <div>
+                <div class="text-sm font-semibold text-gray-700">가이드라인 평가</div>
+                <div class="text-xs text-gray-500">${(data.items || []).filter(i => i.pass).length}/${(data.items || []).length} 항목 통과</div>
+            </div>
+        </div>`;
+
+    // Category groups
+    const categoryColors = { '문체': 'indigo', '구조': 'blue', '금지': 'red', '형식': 'gray' };
+    const orderedCategories = categoryOrder.filter(c => groups[c]);
+    // Add any extra categories not in the predefined order
+    Object.keys(groups).forEach(c => { if (!orderedCategories.includes(c)) orderedCategories.push(c); });
+
+    html += `<div class="space-y-3">`;
+    orderedCategories.forEach(cat => {
+        const items = groups[cat];
+        const passCount = items.filter(i => i.pass).length;
+        const allPass = passCount === items.length;
+        const allFail = passCount === 0;
+        const borderClass = allPass ? 'cat-pass' : allFail ? 'cat-fail' : 'cat-mixed';
+        const color = categoryColors[cat] || 'gray';
+
+        html += `<div class="scorecard-category ${borderClass}">
+            <div class="flex items-center justify-between mb-1">
+                <span class="text-xs font-semibold text-${color}-600 uppercase">${escapeHtml(cat)}</span>
+                <span class="text-xs text-gray-400">${passCount}/${items.length}</span>
+            </div>
+            <div class="space-y-1">`;
+
+        items.forEach(item => {
+            const icon = item.pass
+                ? '<span class="scorecard-item-pass font-bold">✓</span>'
+                : '<span class="scorecard-item-fail font-bold">✗</span>';
+            html += `<div class="flex items-start gap-2 text-xs">
+                <span class="flex-shrink-0 w-4 text-center">${icon}</span>
+                <span class="text-gray-700">${escapeHtml(item.rule)}</span>
+                <span class="text-gray-400 ml-auto flex-shrink-0">${escapeHtml(item.comment)}</span>
+            </div>`;
+        });
+
+        html += `</div></div>`;
+    });
     html += `</div>`;
+
+    // Summary
+    if (data.summary) {
+        html += `<div class="text-xs text-gray-500 pt-2 border-t">${escapeHtml(data.summary)}</div>`;
+    }
+
+    html += `</div>`;
+    container.innerHTML = html;
+}
+
+// Legacy function kept for agent step 5 timeline rendering
+function renderEvaluationTable(evalData) {
+    if (evalData.error) return `<p class="text-red-500">${evalData.error}</p>`;
+    // Use scorecard format inline
+    const score = evalData.overall_score || 0;
+    const scoreColorClass = score >= 80 ? 'score-green' : score >= 60 ? 'score-yellow' : 'score-red';
+    let html = `<div class="flex items-center gap-3 mt-2">
+        <div class="scorecard-score-circle ${scoreColorClass}" style="width:48px;height:48px;">
+            <span style="font-size:20px;font-weight:700;line-height:1">${score}</span>
+            <span style="font-size:9px;opacity:0.8">점</span>
+        </div>
+        <span class="text-sm text-gray-600">${(evalData.items || []).filter(i => i.pass).length}/${(evalData.items || []).length} 항목 통과</span>
+    </div>`;
     return html;
 }
 
-function toggleEvaluation(draftId) {
-    const evalEl = document.getElementById(`eval-${draftId}`);
-    if (!evalEl) return;
+function toggleScorecard(draftId) {
+    const panel = document.getElementById(`scorecard-${draftId}`);
+    if (!panel) return;
 
-    if (evalEl.classList.contains('hidden')) {
+    if (panel.classList.contains('hidden')) {
         const data = draftEvaluations[draftId];
-        if (data) {
-            evalEl.innerHTML = renderEvaluationTable(data);
+        if (data && !panel.dataset.rendered) {
+            renderEvaluationScorecard(data, `scorecard-${draftId}`);
+            panel.dataset.rendered = '1';
         }
-        evalEl.classList.remove('hidden');
+        panel.classList.remove('hidden');
     } else {
-        evalEl.classList.add('hidden');
+        panel.classList.add('hidden');
     }
 }
 
