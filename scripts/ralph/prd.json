@@ -91,8 +91,8 @@
         "python -m py_compile web/models/linkedin_draft.py web/database.py web/api/linkedin.py web/services/linkedin_agent.py 통과"
       ],
       "priority": 6,
-      "passes": false,
-      "notes": "이미 존재하는 것: chat_history 컬럼+마이그레이션, ContentUpdate+PATCH /content 엔드포인트, POST /agent/{session_id}/chat 엔드포인트, chat_refine_by_draft() 메서드. 추가 필요: guidelines_checklist 컬럼+마이그레이션, POST /drafts/{draft_id}/chat 엔드포인트, _save_draft()에서 guidelines_checklist 저장."
+      "passes": true,
+      "notes": "구현 완료: guidelines_checklist 컬럼+마이그레이션+to_dict(), _save_draft()에서 저장, chat_refine_by_draft() 메서드, POST /drafts/{draft_id}/chat 엔드포인트."
     },
     {
       "id": "V2-007",

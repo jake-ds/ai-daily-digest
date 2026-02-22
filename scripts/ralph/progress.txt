@@ -1,3 +1,30 @@
 # Ralph Progress Log
 Started: 2026년 2월 22일 일요일 11시 40분 59초 KST
 ---
+
+## Codebase Patterns
+- New SQLAlchemy columns: add to model + add ALTER TABLE in migrate_db() + add to to_dict()
+- New API endpoint: add to web/api/<router>.py, import in web/api/__init__.py
+- New page route: add to web/app.py, create template in web/templates/
+- Templates use Tailwind CSS + HTMX, no JS frameworks
+- Always py_compile after editing Python files
+- chat_refine() in linkedin_agent.py is session-based; chat_refine_by_draft() in linkedin_service.py is draft-based (works after page refresh)
+- LinkedInDraft stores agent-mode context: analysis, direction, review_notes, evaluation, guidelines_checklist, chat_history
+- Agent sessions are in-memory (AgentSession dataclass in linkedin_agent.py); drafts persist in SQLite
+
+---
+
+## 2026-02-22 - V2-006
+- What was implemented: Draft-based chat infrastructure — guidelines_checklist column + migration, _save_draft() saves checklist from agent session, chat_refine_by_draft() method in LinkedInService, POST /api/linkedin/drafts/{draft_id}/chat endpoint
+- Files changed:
+  - web/models/linkedin_draft.py — added guidelines_checklist column + to_dict()
+  - web/database.py — added guidelines_checklist to migrate_db()
+  - web/services/linkedin_agent.py — _save_draft() now saves guidelines_checklist
+  - web/services/linkedin_service.py — added chat_refine_by_draft() method
+  - web/api/linkedin.py — added POST /drafts/{draft_id}/chat endpoint
+- **Learnings for future iterations:**
+  - chat_refine_by_draft() is modeled after chat_refine() but uses DB state instead of in-memory session
+  - PRD noted chat_refine_by_draft() already existed — it did not; had to create it from scratch
+  - The draft-based chat loads guidelines_checklist, analysis, and chat_history from the draft record for context
+  - ChatMessage pydantic model was already defined and reused for the new endpoint
+---
