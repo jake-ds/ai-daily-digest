@@ -1,0 +1,84 @@
+{
+  "project": "AI Daily Digest",
+  "version": "v5",
+  "branchName": "ralph/linkedin-quality-boost",
+  "description": "LinkedIn V5: 품질 피드백 시각화 & 빠른 반복 — 스코어카드, 빠른 수정, 시나리오 신뢰도, 참고 포스트 태깅, 드래프트 비교",
+  "userStories": [
+    {
+      "id": "V5-001",
+      "title": "평가 결과 시각적 스코어카드",
+      "description": "evaluation JSON을 시각적 스코어카드로 렌더링. overall_score 큰 숫자 + 색상 배지(≥80 녹색, ≥60 노란색, <60 빨간색), items를 카테고리별 PASS/FAIL 배지로 그룹핑. 드래프트 카드에 '평가' 토글 버튼, Agent 모드 완료 시 자동 렌더링, Simple 모드도 표시.",
+      "acceptanceCriteria": [
+        "renderEvaluationScorecard(evalJson, containerId) JS 함수가 evaluation JSON을 시각적 카드로 렌더링",
+        "overall_score가 큰 숫자 + 색상 배지로 표시됨 (≥80 녹색, ≥60 노란색, <60 빨간색)",
+        "items가 카테고리별(문체/구조/금지/형식) 그룹으로 표시, 각 항목에 PASS(✓)/FAIL(✗) 배지",
+        "드래프트 카드에 '평가' 토글 버튼 추가 — 클릭 시 스코어카드 패널 열림/닫힘",
+        "Agent 모드 완료 시 step 5 결과에 스코어카드 자동 렌더링",
+        "Simple 모드 드래프트도 evaluation 값이 있으면 스코어카드 표시"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": "순수 프론트엔드 작업. evaluation JSON은 이미 DB에 저장됨 (V4-005에서 Simple 모드도 저장). Jinja2 템플릿에서 draft.evaluation을 JSON 파싱하여 JS로 전달. 기존 드래프트 카드 패턴(토글 패널) 활용."
+    },
+    {
+      "id": "V5-002",
+      "title": "빠른 수정 팔레트 (Quick Refine)",
+      "description": "채팅 입력 위에 원클릭 수정 버튼 배열. '훅 강화', '본문 축약', '톤 부드럽게', '데이터 추가', '마무리 교체' 5개 버튼. 클릭 시 미리 정의된 프롬프트를 기존 sendDraftChat()/sendChatMessage()로 자동 전송.",
+      "acceptanceCriteria": [
+        "드래프트 채팅 입력 위에 5개 빠른 수정 버튼 표시 (훅 강화 / 본문 축약 / 톤 부드럽게 / 데이터 추가 / 마무리 교체)",
+        "각 버튼에 미리 정의된 수정 프롬프트 텍스트 매핑",
+        "버튼 클릭 시 해당 프롬프트가 채팅으로 전송되고 수정 결과 반영",
+        "드래프트 기반 채팅(sendDraftChat)과 Agent 세션 채팅(sendChatMessage) 모두에서 동작",
+        "버튼은 Tailwind 스타일의 작은 pill 형태, 호버 시 프롬프트 미리보기(title 속성)"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "순수 프론트엔드 작업. 기존 sendDraftChat()/sendChatMessage() 재활용. 프롬프트 텍스트는 JS 상수로 정의. Agent 결과 패널의 채팅 영역에도 동일 팔레트 추가."
+    },
+    {
+      "id": "V5-003",
+      "title": "시나리오 감지 신뢰도 + 대안 추천",
+      "description": "시나리오 감지 시 confidence를 UI에 표시하고, confidence가 낮으면(< 0.75) 대안 시나리오도 추천. detect_scenario_with_alternatives() 메서드 + GET /api/linkedin/scenario/{article_id} 엔드포인트 + UI 배지.",
+      "acceptanceCriteria": [
+        "linkedin_service.py에 detect_scenario_with_alternatives(article) 메서드 추가",
+        "GET /api/linkedin/scenario/{article_id} 엔드포인트가 primary + alternatives 반환",
+        "시나리오 선택 UI에서 추천 시나리오 옆에 confidence % 배지 표시",
+        "confidence < 0.75이면 '대안 시나리오' 섹션에 2순위 시나리오 표시 + 클릭 전환 가능",
+        "confidence ≥ 0.75이면 대안 섹션 숨김"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "백엔드: detect_scenario_detailed()가 이미 confidence를 반환함. 이를 확장하여 top-2 시나리오 반환. 프론트엔드: 시나리오 라디오 버튼 영역에 배지 추가. 기존 detect_scenario_with_claude()를 수정하여 top-2 반환하도록."
+    },
+    {
+      "id": "V5-004",
+      "title": "참고 포스트 시나리오 태깅 UI",
+      "description": "V4에서 ReferencePost.scenario 컬럼을 추가했지만 UI가 없음. 참고 포스트에 시나리오 배지 표시, 드롭다운으로 변경, 시나리오별 필터 기능 추가.",
+      "acceptanceCriteria": [
+        "참고 포스트 등록 시 scenario 필드 전달 가능 (기존 API 확장)",
+        "PATCH /api/settings/reference-posts/{id}/scenario 엔드포인트 추가",
+        "참고 포스트 목록에서 시나리오별 필터링 지원 (?scenario=D)",
+        "참고 포스트 카드에 시나리오 배지 표시 (A~F 색상 구분, 미지정 시 회색)",
+        "배지 클릭 시 드롭다운으로 시나리오 변경 가능"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "백엔드: ReferencePost.scenario는 V4-002에서 이미 추가됨. API만 확장. 프론트엔드: settings/guidelines.html에서 참고 포스트 UI 수정. 시나리오 색상은 기존 시나리오 라디오 버튼의 Tailwind 색상 패턴 재활용."
+    },
+    {
+      "id": "V5-005",
+      "title": "드래프트 나란히 비교",
+      "description": "같은 기사에 여러 드래프트가 있을 때 2개를 나란히 비교하는 UI. 훅(첫 줄) 하이라이트, 글자수, 평가 점수 비교. '이 버전 사용' 버튼으로 final 마킹.",
+      "acceptanceCriteria": [
+        "드래프트 2개 이상일 때 '비교' 버튼 표시",
+        "클릭 시 비교 패널 열림 — 2개 드래프트를 나란히(side-by-side) 표시",
+        "각 드래프트: 훅(첫 줄) 하이라이트, 글자수, 시나리오, 평가 점수(overall_score) 표시",
+        "글자수 비교 바 (시각적 bar chart)",
+        "'이 버전 사용' 버튼 클릭 시 해당 드래프트 status를 'final'로 업데이트"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": "순수 프론트엔드 작업 + PATCH 엔드포인트 (status 변경은 기존 API 확장 가능). 비교 패널은 모달 또는 drafts-container 하단에 확장. 드래프트 선택은 체크박스 2개 방식."
+    }
+  ]
+}
