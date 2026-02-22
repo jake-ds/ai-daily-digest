@@ -4,7 +4,7 @@ You are an autonomous coding agent working on **AI Daily Digest** - a Python/Fas
 
 ## Your Task
 
-1. Read the PRD at `scripts/ralph/prd.json`
+1. Read the PRD at `scripts/ralph/prd.json` (Note: ralph.sh may substitute this path with a versioned file like `prd-v3.json`)
 2. Read the progress log at `scripts/ralph/progress.txt` (check Codebase Patterns section first)
 3. Check you're on the correct branch from PRD `branchName`. If not, check it out or create from main.
 4. Pick the **highest priority** user story where `passes: false`

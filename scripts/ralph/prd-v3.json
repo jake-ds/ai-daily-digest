@@ -1,0 +1,26 @@
+{
+  "project": "AI Daily Digest",
+  "version": "v3",
+  "branchName": "ralph/linkedin-quality-boost",
+  "description": "LinkedIn V3: Hook Lab UX 강화 — 훅 편집, 복사, 직접 입력.",
+  "userStories": [
+    {
+      "id": "V3-001",
+      "title": "Hook Lab UX: edit, copy, and custom hook input",
+      "description": "Hook Lab에서 제안된 훅을 편집 후 선택하거나, 바로 복사하거나, 직접 입력할 수 있는 기능을 추가한다. 현재는 제안된 훅을 그대로 선택만 가능해서 미세 조정이 불가능하다.",
+      "acceptanceCriteria": [
+        "각 훅 카드에 '복사' 버튼 추가 — 클릭 시 해당 훅 텍스트를 클립보드에 복사 (copyToClipboard 활용, 버튼 피드백 'Copied!')",
+        "각 훅 카드에 '편집' 버튼 추가 — 클릭 시 훅 텍스트가 textarea로 전환 (인라인 편집)",
+        "편집 중 textarea 하단에 글자수 카운터 표시 + 저장/취소 버튼",
+        "저장 시 카드의 훅 텍스트가 편집된 내용으로 업데이트 — 이후 '이 훅으로 초안 생성' 클릭 시 편집된 훅이 전달됨",
+        "훅 카드 목록 최하단에 '직접 입력' 섹션 추가: textarea + '이 훅으로 초안 생성' 버튼",
+        "직접 입력 textarea에 placeholder: '나만의 훅을 직접 작성하세요 (1-3줄)'",
+        "직접 입력한 훅도 기존 훅 카드 선택과 동일하게 generate_draft()/agent_start()의 hook 파라미터로 전달",
+        "제안된 훅 선택과 직접 입력은 상호 배타적 — 하나를 선택/입력하면 다른 쪽은 선택 해제"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": "순수 프론트엔드 작업. Python 변경 없음. 기존 Hook Lab UI(훅 카드 + 선택 + renderLinkedInPreview)를 확장. 기존 패턴 활용: copyToClipboard(text, btnElement), startInlineEdit/saveInlineEdit 패턴, getCharCountClasses(). 직접 입력의 훅은 style='custom'으로 구분."
+    }
+  ]
+}
