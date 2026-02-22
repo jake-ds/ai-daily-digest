@@ -318,6 +318,23 @@
                     <div class="text-center text-gray-500 py-4">훅 생성 중...</div>
                 </div>
 
+                <!-- Custom Hook Input -->
+                <div id="hook-custom-section" class="hidden px-4 pb-4">
+                    <div class="border-t pt-4">
+                        <div class="text-sm font-medium text-gray-700 mb-2">직접 입력</div>
+                        <div id="hook-custom-card" class="border-2 border-dashed border-gray-300 rounded-xl p-4 transition-all">
+                            <textarea id="hook-custom-textarea" rows="3"
+                                class="w-full text-sm border rounded-lg p-3 focus:ring-2 focus:ring-amber-300 focus:border-amber-400"
+                                placeholder="나만의 훅을 직접 작성하세요 (1-3줄)"
+                                oninput="onCustomHookInput()"
+                                onfocus="activateCustomHook()"></textarea>
+                            <div class="flex items-center justify-between mt-2">
+                                <span id="hook-custom-counter" class="text-xs text-gray-500">0자</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Selected Hook Actions -->
                 <div id="hook-actions" class="hidden px-4 py-3 border-t bg-gray-50 flex items-center justify-between">
                     <span class="text-sm text-gray-600">
@@ -1412,6 +1429,13 @@ async function startHookLab() {
     panel.classList.remove('hidden');
     cardsContainer.innerHTML = '<div class="text-center text-gray-500 py-4"><svg class="animate-spin h-6 w-6 mx-auto mb-2 text-amber-500" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>훅 생성 중...</div>';
     document.getElementById('hook-actions').classList.add('hidden');
+    document.getElementById('hook-custom-section').classList.add('hidden');
+    // Reset custom hook input
+    const customTextarea = document.getElementById('hook-custom-textarea');
+    if (customTextarea) { customTextarea.value = ''; }
+    const customCounter = document.getElementById('hook-custom-counter');
+    if (customCounter) { customCounter.textContent = '0자'; }
+    deactivateCustomHook();
     selectedHookText = null;
     btn.disabled = true;
     spinner.classList.remove('hidden');
@@ -1443,6 +1467,7 @@ async function startHookLab() {
 
 function closeHookLab() {
     document.getElementById('hook-lab-panel').classList.add('hidden');
+    document.getElementById('hook-custom-section').classList.add('hidden');
     selectedHookText = null;
 }
 
@@ -1474,13 +1499,32 @@ function renderHookCards(hooks) {
         card.innerHTML = `
             <div class="flex items-start justify-between mb-2">
                 <span class="hook-style-badge ${colorClass}">${escapeHtml(hook.style)}</span>
-                <span class="text-xs text-gray-400">${hook.hook.length}자</span>
+                <div class="flex items-center gap-2">
+                    <span class="text-xs text-gray-400" id="hook-char-${idx}">${hook.hook.length}자</span>
+                    <button onclick="event.stopPropagation(); copyHookText(${idx}, this)" class="px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200">복사</button>
+                    <button onclick="event.stopPropagation(); startHookEdit(${idx})" class="px-2 py-0.5 text-xs bg-blue-50 text-blue-600 rounded hover:bg-blue-100">편집</button>
+                </div>
             </div>
-            <div class="hook-preview">${preview}</div>
-            <div class="mt-2 text-xs text-gray-500">${escapeHtml(hook.reasoning)}</div>
+            <div id="hook-display-${idx}">
+                <div class="hook-preview">${preview}</div>
+                <div class="mt-2 text-xs text-gray-500">${escapeHtml(hook.reasoning)}</div>
+            </div>
+            <div id="hook-edit-${idx}" class="hidden mt-2">
+                <textarea id="hook-edit-textarea-${idx}" class="w-full text-sm border rounded-lg p-3 focus:ring-2 focus:ring-amber-300 focus:border-amber-400" rows="4" oninput="updateHookEditCharCount(${idx})" onclick="event.stopPropagation()">${escapeHtml(hook.hook)}</textarea>
+                <div class="flex items-center justify-between mt-2">
+                    <span id="hook-edit-counter-${idx}" class="text-xs text-gray-500">${hook.hook.length}자</span>
+                    <div class="flex gap-2">
+                        <button onclick="event.stopPropagation(); cancelHookEdit(${idx})" class="px-3 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300">취소</button>
+                        <button onclick="event.stopPropagation(); saveHookEdit(${idx})" class="px-3 py-1 text-xs bg-amber-500 text-white rounded hover:bg-amber-600">저장</button>
+                    </div>
+                </div>
+            </div>
         `;
         container.appendChild(card);
     });
+
+    // Show custom hook section
+    document.getElementById('hook-custom-section').classList.remove('hidden');
 }
 
 function renderLinkedInPreview(hookText) {
@@ -1505,10 +1549,13 @@ function renderLinkedInPreview(hookText) {
 }
 
 function selectHook(idx) {
-    // Deselect all
+    // Deselect all hook cards
     document.querySelectorAll('.hook-card').forEach(c => c.classList.remove('selected'));
     // Select this one
     document.getElementById(`hook-card-${idx}`).classList.add('selected');
+
+    // Deselect custom hook (mutual exclusivity)
+    deactivateCustomHook();
 
     selectedHookText = generatedHooks[idx].hook;
     const actions = document.getElementById('hook-actions');
@@ -1562,6 +1609,121 @@ function agentWithSelectedHook() {
     // Close hook lab panel and start agent mode with selected hook
     document.getElementById('hook-lab-panel').classList.add('hidden');
     startAgentMode();
+}
+
+// --- Hook Card: Copy & Edit ---
+
+function copyHookText(idx, btnEl) {
+    const text = generatedHooks[idx].hook;
+    navigator.clipboard.writeText(text).then(() => {
+        const originalText = btnEl.textContent;
+        btnEl.textContent = 'Copied!';
+        btnEl.classList.add('bg-green-100', 'text-green-700');
+        btnEl.classList.remove('bg-gray-100', 'text-gray-600');
+        setTimeout(() => {
+            btnEl.textContent = originalText;
+            btnEl.classList.remove('bg-green-100', 'text-green-700');
+            btnEl.classList.add('bg-gray-100', 'text-gray-600');
+        }, 1500);
+    });
+}
+
+function startHookEdit(idx) {
+    const displayEl = document.getElementById(`hook-display-${idx}`);
+    const editEl = document.getElementById(`hook-edit-${idx}`);
+    const textarea = document.getElementById(`hook-edit-textarea-${idx}`);
+
+    displayEl.classList.add('hidden');
+    editEl.classList.remove('hidden');
+    textarea.value = generatedHooks[idx].hook;
+    updateHookEditCharCount(idx);
+    textarea.focus();
+}
+
+function cancelHookEdit(idx) {
+    document.getElementById(`hook-display-${idx}`).classList.remove('hidden');
+    document.getElementById(`hook-edit-${idx}`).classList.add('hidden');
+}
+
+function saveHookEdit(idx) {
+    const textarea = document.getElementById(`hook-edit-textarea-${idx}`);
+    const newText = textarea.value.trim();
+    if (!newText) return;
+
+    // Update the hook data
+    generatedHooks[idx].hook = newText;
+
+    // Update display
+    const displayEl = document.getElementById(`hook-display-${idx}`);
+    const preview = renderLinkedInPreview(newText);
+    displayEl.querySelector('.hook-preview').innerHTML = preview;
+
+    // Update char count in header
+    const charEl = document.getElementById(`hook-char-${idx}`);
+    if (charEl) charEl.textContent = `${newText.length}자`;
+
+    // If this hook is currently selected, update selectedHookText
+    if (document.getElementById(`hook-card-${idx}`).classList.contains('selected')) {
+        selectedHookText = newText;
+    }
+
+    // Switch back to display mode
+    displayEl.classList.remove('hidden');
+    document.getElementById(`hook-edit-${idx}`).classList.add('hidden');
+
+    showToast('훅이 수정되었습니다', 'success');
+}
+
+function updateHookEditCharCount(idx) {
+    const textarea = document.getElementById(`hook-edit-textarea-${idx}`);
+    const counter = document.getElementById(`hook-edit-counter-${idx}`);
+    counter.textContent = `${textarea.value.length}자`;
+}
+
+// --- Custom Hook Input ---
+
+function onCustomHookInput() {
+    const textarea = document.getElementById('hook-custom-textarea');
+    const counter = document.getElementById('hook-custom-counter');
+    const len = textarea.value.length;
+    counter.textContent = `${len}자`;
+
+    if (len > 0) {
+        activateCustomHook();
+    } else {
+        deactivateCustomHook();
+        document.getElementById('hook-actions').classList.add('hidden');
+    }
+}
+
+function activateCustomHook() {
+    const textarea = document.getElementById('hook-custom-textarea');
+    const text = textarea.value.trim();
+    if (!text) return;
+
+    // Deselect all hook cards (mutual exclusivity)
+    document.querySelectorAll('.hook-card').forEach(c => c.classList.remove('selected'));
+
+    // Highlight custom card
+    const customCard = document.getElementById('hook-custom-card');
+    customCard.classList.remove('border-gray-300');
+    customCard.classList.add('border-amber-400', 'bg-amber-50');
+
+    // Set selected hook text
+    selectedHookText = text;
+
+    // Show actions bar with "직접 입력" label
+    const actions = document.getElementById('hook-actions');
+    actions.classList.remove('hidden');
+    document.getElementById('hook-selected-style').textContent = '직접 입력';
+}
+
+function deactivateCustomHook() {
+    const customCard = document.getElementById('hook-custom-card');
+    if (customCard) {
+        customCard.classList.remove('border-amber-400', 'bg-amber-50');
+        customCard.classList.add('border-gray-300');
+    }
 }
 
 // Keyboard shortcuts for article detail page
