@@ -50,6 +50,29 @@ async def get_scenarios():
     }
 
 
+@router.get("/scenario/{article_id}")
+async def get_scenario_with_alternatives(
+    article_id: int,
+    db: Session = Depends(get_db),
+):
+    """Get recommended scenario with confidence and alternatives."""
+    article = db.query(Article).filter(Article.id == article_id).first()
+    if not article:
+        raise HTTPException(status_code=404, detail="Article not found")
+
+    service = LinkedInService(db)
+
+    try:
+        result = service.detect_scenario_with_alternatives(article)
+        return {
+            "article_id": article_id,
+            "primary": result["primary"],
+            "alternatives": result["alternatives"],
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Scenario detection failed: {str(e)}")
+
+
 @router.post("/hooks/{article_id}")
 async def generate_hooks(
     article_id: int,

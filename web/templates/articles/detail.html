@@ -229,7 +229,16 @@
             <div class="flex items-start">
                 <span class="text-2xl mr-3">&#x1F4A1;</span>
                 <div class="flex-1">
-                    <div class="font-medium text-blue-900">추천 시나리오: {{ recommended_scenario }} - {{ scenarios[recommended_scenario].name }}</div>
+                    <div class="font-medium text-blue-900 flex items-center gap-2">
+                        추천 시나리오: {{ recommended_scenario }} - {{ scenarios[recommended_scenario].name }}
+                        {% set conf_pct = (scenario_confidence * 100) | int %}
+                        <span class="text-xs px-2 py-0.5 rounded-full font-medium
+                            {% if conf_pct >= 80 %}bg-green-100 text-green-700
+                            {% elif conf_pct >= 60 %}bg-yellow-100 text-yellow-700
+                            {% else %}bg-red-100 text-red-700{% endif %}">
+                            {{ conf_pct }}%
+                        </span>
+                    </div>
                     {% if scenario_reason %}
                     <div class="text-sm text-blue-700 mt-1">{{ scenario_reason }}</div>
                     {% endif %}
@@ -237,6 +246,32 @@
                 </div>
             </div>
         </div>
+
+        <!-- Alternative Scenario (confidence < 0.75) -->
+        {% if scenario_confidence < 0.75 and scenario_alternatives %}
+        <div id="alternative-scenario-section" class="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+            <div class="text-sm font-medium text-amber-800 mb-2">대안 시나리오</div>
+            {% for alt in scenario_alternatives %}
+            <button type="button"
+                onclick="selectScenario('{{ alt.scenario }}')"
+                class="w-full text-left p-2 rounded-lg border border-amber-200 bg-white hover:bg-amber-50 transition group">
+                <div class="flex items-center gap-2">
+                    <span class="font-medium text-gray-900">{{ alt.scenario }}: {{ scenarios[alt.scenario].name }}</span>
+                    {% set alt_pct = (alt.confidence * 100) | int %}
+                    <span class="text-xs px-2 py-0.5 rounded-full font-medium
+                        {% if alt_pct >= 80 %}bg-green-100 text-green-700
+                        {% elif alt_pct >= 60 %}bg-yellow-100 text-yellow-700
+                        {% else %}bg-red-100 text-red-700{% endif %}">
+                        {{ alt_pct }}%
+                    </span>
+                </div>
+                {% if alt.reason %}
+                <div class="text-xs text-gray-600 mt-1">{{ alt.reason }}</div>
+                {% endif %}
+            </button>
+            {% endfor %}
+        </div>
+        {% endif %}
 
         <!-- Scenario Selection -->
         <div class="mb-6">
@@ -257,6 +292,11 @@
                     <span class="hidden sm:inline">: {{ scenario.name }}</span>
                     {% if key == recommended_scenario %}
                     <span class="ml-1 text-xs bg-blue-500 text-white px-1.5 py-0.5 rounded">추천</span>
+                    {% set conf_pct = (scenario_confidence * 100) | int %}
+                    <span class="ml-1 text-xs px-1.5 py-0.5 rounded
+                        {% if conf_pct >= 80 %}bg-green-100 text-green-700
+                        {% elif conf_pct >= 60 %}bg-yellow-100 text-yellow-700
+                        {% else %}bg-red-100 text-red-700{% endif %}">{{ conf_pct }}%</span>
                     {% endif %}
                 </button>
                 {% endfor %}

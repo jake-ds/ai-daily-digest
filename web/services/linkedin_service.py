@@ -110,13 +110,14 @@ class LinkedInService:
             return result
 
     def _detect_scenario_with_claude(self, article: Article) -> dict:
-        """Use Claude API to analyze article and detect best scenario."""
+        """Use Claude API to analyze article and detect best scenario (top-2)."""
         scenarios_desc = "\n".join(
             f"- {key}: {val['name']} - {val['description']}"
             for key, val in SCENARIOS.items()
         )
 
         prompt = f"""다음 기사에 가장 적합한 LinkedIn 포스팅 시나리오(A-F)를 분석해주세요.
+1순위와 2순위 시나리오를 각각 confidence와 함께 반환하세요.
 
 ## 기사
 - 제목: {article.title}
@@ -127,11 +128,11 @@ class LinkedInService:
 {scenarios_desc}
 
 ## 출력 형식 (JSON만 출력)
-{{"scenario": "A", "confidence": 0.85, "reason": "이 기사가 해당 시나리오에 적합한 이유를 한 문장으로"}}"""
+{{"scenario": "A", "confidence": 0.85, "reason": "1순위 시나리오 적합 이유", "alternative": {{"scenario": "D", "confidence": 0.6, "reason": "2순위 시나리오 적합 이유"}}}}"""
 
         response = self.client.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=200,
+            max_tokens=300,
             messages=[{"role": "user", "content": prompt}],
         )
 
@@ -143,13 +144,46 @@ class LinkedInService:
             scenario = data.get("scenario", "A")
             if scenario not in SCENARIOS:
                 scenario = "A"
+
+            # 대안 시나리오 파싱
+            alternatives = []
+            alt_data = data.get("alternative")
+            if alt_data and isinstance(alt_data, dict):
+                alt_scenario = alt_data.get("scenario", "")
+                if alt_scenario in SCENARIOS and alt_scenario != scenario:
+                    alternatives.append({
+                        "scenario": alt_scenario,
+                        "confidence": float(alt_data.get("confidence", 0.5)),
+                        "reason": alt_data.get("reason", ""),
+                    })
+
             return {
                 "scenario": scenario,
                 "confidence": float(data.get("confidence", 0.8)),
                 "reason": data.get("reason", ""),
+                "alternatives": alternatives,
             }
 
         raise ValueError("Failed to parse Claude response")
+
+    def detect_scenario_with_alternatives(self, article: Article) -> dict:
+        """Detect the best scenario with alternatives for low-confidence cases.
+
+        Returns:
+            dict: {
+                primary: {scenario: str, confidence: float, reason: str},
+                alternatives: [{scenario: str, confidence: float, reason: str}]
+            }
+        """
+        result = self.detect_scenario_detailed(article)
+        return {
+            "primary": {
+                "scenario": result["scenario"],
+                "confidence": result["confidence"],
+                "reason": result["reason"],
+            },
+            "alternatives": result.get("alternatives", []),
+        }
 
     def _detect_scenario_keyword(self, article: Article) -> str:
         """Keyword-based scenario detection (fallback)."""
