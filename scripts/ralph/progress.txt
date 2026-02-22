@@ -16,6 +16,8 @@ Started: 2026년 2월 22일 일요일 11시 40분 59초 KST
 - Cannot nest f"""...""" inside an f-string — extract to variable first
 - LinkedIn fold point for previews: ~210 chars or 3rd newline
 - When adding Claude API prompts: build sections as variables, then compose in final f-string
+- Hook Lab: copyHookText/startHookEdit/saveHookEdit/cancelHookEdit for per-card copy/edit; activateCustomHook/deactivateCustomHook for custom input mutual exclusivity
+- event.stopPropagation() required on hook card buttons to prevent card selection on button click
 
 ---
 
@@ -73,4 +75,23 @@ Started: 2026년 2월 22일 일요일 11시 40분 59초 KST
   - Hook styles mapped to color classes for visual differentiation in UI
   - selectedHookText is a module-level JS variable shared between hook lab and generation functions
   - LinkedIn fold point: ~210 chars or 3rd newline
+---
+
+## 2026-02-22 - V3-001
+- What was implemented: Hook Lab UX enhancements — copy button, inline edit, and custom hook input for each hook card
+- Files changed:
+  - web/templates/articles/detail.html — added copy/edit buttons to renderHookCards(), inline edit panel per hook (textarea + char counter + save/cancel), custom hook input section with mutual exclusivity, activateCustomHook/deactivateCustomHook functions
+- Features added:
+  - 복사 button on each hook card: copies hook text, shows "Copied!" feedback with green highlight for 1.5s
+  - 편집 button on each hook card: toggles inline textarea edit mode with char counter and save/cancel
+  - saveHookEdit() updates generatedHooks[idx].hook, re-renders preview, and updates selectedHookText if selected
+  - Custom hook input section (dashed border card with textarea, placeholder "나만의 훅을 직접 작성하세요 (1-3줄)")
+  - Mutual exclusivity: selecting a hook card deactivates custom hook, typing in custom textarea deselects all hook cards
+  - Custom hook feeds into existing generateWithHook()/startAgentMode() via shared selectedHookText variable
+- **Learnings for future iterations:**
+  - event.stopPropagation() is essential on buttons inside clickable card divs to prevent parent onclick
+  - Custom hook uses onfocus + oninput handlers; onfocus calls activateCustomHook() which has guard for empty text
+  - The hook-custom-section is initially hidden and revealed by renderHookCards() after hooks are loaded
+  - No Python changes needed — purely frontend JS/HTML work
+  - Jinja2 template syntax can be verified with `python3 -c "from jinja2 import Environment, FileSystemLoader; ..."`
 ---

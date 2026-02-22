@@ -19,7 +19,7 @@
         "제안된 훅 선택과 직접 입력은 상호 배타적 — 하나를 선택/입력하면 다른 쪽은 선택 해제"
       ],
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "notes": "순수 프론트엔드 작업. Python 변경 없음. 기존 Hook Lab UI(훅 카드 + 선택 + renderLinkedInPreview)를 확장. 기존 패턴 활용: copyToClipboard(text, btnElement), startInlineEdit/saveInlineEdit 패턴, getCharCountClasses(). 직접 입력의 훅은 style='custom'으로 구분."
     }
   ]
