@@ -22,6 +22,8 @@ Started: 2026년 2월 22일 일요일 11시 40분 59초 KST
 - Agent step 5 emits evaluation JSON as step_complete content; store in JS variable for reuse in agent result panel
 - renderEvaluationScorecard(evalData, containerId) renders full visual scorecard; renderEvaluationTable(evalData) returns compact inline summary
 - Draft card evaluation panels use lazy rendering with dataset.rendered flag to avoid re-rendering on toggle
+- allDrafts JS object stores per-draft metadata from Jinja2 loop; use for client-side features like comparison
+- Compare mode pattern: toggle checkboxes with .hidden class, FIFO auto-deselect when exceeding max selections
 
 ---
 
@@ -161,4 +163,25 @@ Started: 2026년 2월 22일 일요일 11시 40분 59초 KST
   - Filter buttons use data-scenario attribute on ref-card divs for client-side filtering
   - Dropdown pattern: toggle on badge click + document click listener to close all dropdowns
   - event.stopPropagation() on badge button prevents document click from immediately closing dropdown
+---
+
+## 2026-02-22 - V5-005
+- What was implemented: Draft side-by-side comparison — compare button, checkbox selection, side-by-side panel with hook highlight, char count bars, eval scores, "이 버전 사용" finalize button
+- Files changed:
+  - web/templates/articles/detail.html — CSS for compare panel, compare button + panel HTML, allDrafts JS data store, compare mode functions (toggleCompareMode/onCompareSelect/renderComparePanel/closeComparePanel/finalizeFromCompare/escapeHtml), keyboard shortcut 'c'
+- Features added:
+  - "비교" button shown when 2+ drafts exist (emerald themed)
+  - Compare mode: checkboxes appear on draft cards, select any 2 to compare
+  - Side-by-side comparison panel: hook (first line) highlighted in amber, body text, char count with visual bar chart, scenario badge, version, agent/final badges
+  - Evaluation score badge (green ≥80, yellow ≥60, red <60) or "평가 없음" if no evaluation
+  - Character count comparison bar (relative sizing, color-coded: green ≤2000, yellow ≤3000, red >3000)
+  - "이 버전 사용" button calls existing finalize endpoint, already-final drafts show "선택된 버전" label with green border
+  - Auto-deselect oldest when 3rd checkbox is clicked (FIFO)
+  - Keyboard shortcut 'c' toggles compare mode
+- **Learnings for future iterations:**
+  - finalizeDraft endpoint already existed (POST /api/linkedin/drafts/{id}/finalize) — no backend changes needed
+  - allDrafts JS object stores draft metadata from Jinja2 loop; live content read from DOM via draft-{id} element
+  - draftEvaluations already populated from prior V5-001 work — reused for compare panel eval scores
+  - escapeHtml() using DOM textContent/innerHTML is the safe pattern for template string injection
+  - No Python changes needed — purely frontend CSS/JS/HTML work
 ---
