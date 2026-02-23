@@ -113,6 +113,62 @@
         font-size: 11px;
         font-weight: 600;
     }
+
+    /* Scorecard styles */
+    .scorecard-score-circle {
+        width: 72px; height: 72px;
+        border-radius: 50%;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        font-weight: 700;
+    }
+    .scorecard-score-circle .score-number { font-size: 28px; line-height: 1; }
+    .scorecard-score-circle .score-label { font-size: 10px; opacity: 0.8; }
+    .scorecard-score-circle.score-green { background: #dcfce7; color: #15803d; }
+    .scorecard-score-circle.score-yellow { background: #fef9c3; color: #a16207; }
+    .scorecard-score-circle.score-red { background: #fee2e2; color: #b91c1c; }
+    .scorecard-category { border-left: 3px solid #e5e7eb; padding-left: 12px; }
+    .scorecard-category.cat-pass { border-color: #22c55e; }
+    .scorecard-category.cat-fail { border-color: #ef4444; }
+    .scorecard-category.cat-mixed { border-color: #f59e0b; }
+    .scorecard-item-pass { color: #16a34a; }
+    .scorecard-item-fail { color: #dc2626; }
+
+    /* Compare panel styles */
+    .compare-panel {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+    }
+    .compare-card {
+        border: 2px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 16px;
+        background: white;
+    }
+    .compare-card.selected-final {
+        border-color: #22c55e;
+        box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.15);
+    }
+    .compare-hook {
+        background: #fef3c7;
+        border-radius: 6px;
+        padding: 8px 12px;
+        font-weight: 600;
+        font-size: 14px;
+        line-height: 1.5;
+        white-space: pre-wrap;
+    }
+    .compare-bar {
+        height: 8px;
+        border-radius: 4px;
+        transition: width 0.3s ease;
+    }
+    .compare-checkbox {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+    }
 </style>
 {% endblock %}
 
@@ -209,7 +265,16 @@
             <div class="flex items-start">
                 <span class="text-2xl mr-3">&#x1F4A1;</span>
                 <div class="flex-1">
-                    <div class="font-medium text-blue-900">추천 시나리오: {{ recommended_scenario }} - {{ scenarios[recommended_scenario].name }}</div>
+                    <div class="font-medium text-blue-900 flex items-center gap-2">
+                        추천 시나리오: {{ recommended_scenario }} - {{ scenarios[recommended_scenario].name }}
+                        {% set conf_pct = (scenario_confidence * 100) | int %}
+                        <span class="text-xs px-2 py-0.5 rounded-full font-medium
+                            {% if conf_pct >= 80 %}bg-green-100 text-green-700
+                            {% elif conf_pct >= 60 %}bg-yellow-100 text-yellow-700
+                            {% else %}bg-red-100 text-red-700{% endif %}">
+                            {{ conf_pct }}%
+                        </span>
+                    </div>
                     {% if scenario_reason %}
                     <div class="text-sm text-blue-700 mt-1">{{ scenario_reason }}</div>
                     {% endif %}
@@ -217,6 +282,32 @@
                 </div>
             </div>
         </div>
+
+        <!-- Alternative Scenario (confidence < 0.75) -->
+        {% if scenario_confidence < 0.75 and scenario_alternatives %}
+        <div id="alternative-scenario-section" class="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+            <div class="text-sm font-medium text-amber-800 mb-2">대안 시나리오</div>
+            {% for alt in scenario_alternatives %}
+            <button type="button"
+                onclick="selectScenario('{{ alt.scenario }}')"
+                class="w-full text-left p-2 rounded-lg border border-amber-200 bg-white hover:bg-amber-50 transition group">
+                <div class="flex items-center gap-2">
+                    <span class="font-medium text-gray-900">{{ alt.scenario }}: {{ scenarios[alt.scenario].name }}</span>
+                    {% set alt_pct = (alt.confidence * 100) | int %}
+                    <span class="text-xs px-2 py-0.5 rounded-full font-medium
+                        {% if alt_pct >= 80 %}bg-green-100 text-green-700
+                        {% elif alt_pct >= 60 %}bg-yellow-100 text-yellow-700
+                        {% else %}bg-red-100 text-red-700{% endif %}">
+                        {{ alt_pct }}%
+                    </span>
+                </div>
+                {% if alt.reason %}
+                <div class="text-xs text-gray-600 mt-1">{{ alt.reason }}</div>
+                {% endif %}
+            </button>
+            {% endfor %}
+        </div>
+        {% endif %}
 
         <!-- Scenario Selection -->
         <div class="mb-6">
@@ -237,6 +328,11 @@
                     <span class="hidden sm:inline">: {{ scenario.name }}</span>
                     {% if key == recommended_scenario %}
                     <span class="ml-1 text-xs bg-blue-500 text-white px-1.5 py-0.5 rounded">추천</span>
+                    {% set conf_pct = (scenario_confidence * 100) | int %}
+                    <span class="ml-1 text-xs px-1.5 py-0.5 rounded
+                        {% if conf_pct >= 80 %}bg-green-100 text-green-700
+                        {% elif conf_pct >= 60 %}bg-yellow-100 text-yellow-700
+                        {% else %}bg-red-100 text-red-700{% endif %}">{{ conf_pct }}%</span>
                     {% endif %}
                 </button>
                 {% endfor %}
@@ -428,6 +524,9 @@
                 </div>
             </div>
 
+            <!-- Agent Evaluation Scorecard (auto-rendered after agent completes) -->
+            <div id="agent-scorecard-panel" class="hidden"></div>
+
             <!-- Chat Interface -->
             <div class="border rounded-lg overflow-hidden">
                 <div class="bg-purple-50 px-4 py-3 border-b">
@@ -435,6 +534,8 @@
                 </div>
                 <div class="p-4">
                     <div id="chat-messages" class="space-y-3 mb-4 max-h-80 overflow-y-auto"></div>
+                    <!-- Quick Refine Palette -->
+                    <div class="flex flex-wrap gap-1.5 mb-2" id="agent-quick-refine"></div>
                     <div class="flex gap-2">
                         <input type="text" id="chat-input"
                             class="flex-1 text-sm border rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-300 focus:border-purple-400"
@@ -449,10 +550,33 @@
             </div>
         </div>
 
+        <!-- Compare Button (shown when 2+ drafts) -->
+        {% if drafts|length >= 2 %}
+        <div class="mt-6 flex items-center justify-between">
+            <h3 class="text-lg font-semibold text-gray-800">Drafts ({{ drafts|length }})</h3>
+            <button id="compare-btn" onclick="toggleCompareMode()"
+                    class="px-4 py-2 text-sm bg-emerald-100 text-emerald-700 rounded-lg hover:bg-emerald-200 font-medium">
+                비교
+            </button>
+        </div>
+        {% endif %}
+
+        <!-- Compare Panel (hidden by default) -->
+        <div id="compare-panel" class="hidden mt-4 border-2 border-emerald-200 rounded-xl p-5 bg-emerald-50">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-bold text-emerald-800">드래프트 비교</h3>
+                <button onclick="closeComparePanel()" class="text-gray-500 hover:text-gray-700 text-xl">&times;</button>
+            </div>
+            <div id="compare-content" class="compare-panel"></div>
+        </div>
+
         <!-- Drafts Container -->
         <div id="drafts-container" class="mt-6 space-y-4">
             {% for draft in drafts|sort(attribute='version', reverse=true) %}
-            <div class="border rounded-lg p-4 bg-gray-50">
+            <div class="border rounded-lg p-4 bg-gray-50 relative" data-draft-id="{{ draft.id }}">
+                <!-- Compare checkbox (hidden by default) -->
+                <input type="checkbox" class="compare-checkbox hidden" id="compare-cb-{{ draft.id }}"
+                       onchange="onCompareSelect({{ draft.id }})" title="비교할 드래프트 선택">
                 <div class="flex items-center justify-between mb-3">
                     <div class="flex items-center space-x-2">
                         <span class="px-2 py-1 text-xs font-medium bg-purple-100 text-purple-800 rounded">
@@ -470,6 +594,12 @@
                     </div>
                     <div class="flex items-center space-x-2">
                         <span class="text-xs" id="draft-char-badge-{{ draft.id }}"></span>
+                        {% if draft.evaluation %}
+                        <button onclick="toggleScorecard({{ draft.id }})"
+                                class="px-3 py-1 text-xs bg-indigo-100 text-indigo-700 rounded hover:bg-indigo-200">
+                            평가
+                        </button>
+                        {% endif %}
                         <button onclick="copyToClipboard(document.getElementById('draft-{{ draft.id }}').innerText)"
                                 class="px-3 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300">
                             Copy
@@ -527,6 +657,8 @@
                     </div>
                     <div class="p-3">
                         <div id="draft-chat-messages-{{ draft.id }}" class="space-y-2 mb-3 max-h-60 overflow-y-auto"></div>
+                        <!-- Quick Refine Palette -->
+                        <div class="flex flex-wrap gap-1.5 mb-2" id="draft-quick-refine-{{ draft.id }}"></div>
                         <div class="flex gap-2">
                             <input type="text" id="draft-chat-input-{{ draft.id }}"
                                 class="flex-1 text-sm border rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-300 focus:border-purple-400"
@@ -541,12 +673,8 @@
                 </div>
 
                 {% if draft.evaluation %}
-                <div class="mt-3 pt-3 border-t">
-                    <button onclick="toggleEvaluation({{ draft.id }})" class="text-sm text-purple-600 hover:text-purple-800">
-                        가이드라인 평가 보기
-                    </button>
-                    <div id="eval-{{ draft.id }}" class="hidden mt-2"></div>
-                </div>
+                <!-- Scorecard panel (hidden by default, toggled by 평가 button) -->
+                <div id="scorecard-{{ draft.id }}" class="hidden mt-3 pt-3 border-t"></div>
                 {% endif %}
 
                 <div class="mt-2 text-xs text-gray-400">
@@ -596,6 +724,23 @@ let agentSessionId = null;
 let agentDraftId = null;
 let eventSource = null;
 let stepReferenceData = {};
+
+// Draft data for comparison
+const allDrafts = {};
+{% for draft in drafts %}
+allDrafts[{{ draft.id }}] = {
+    id: {{ draft.id }},
+    scenario: "{{ draft.scenario or '' }}",
+    version: {{ draft.version or 1 }},
+    status: "{{ draft.status or 'draft' }}",
+    generation_mode: "{{ draft.generation_mode or 'simple' }}",
+    content: {{ draft.draft_content | tojson }},
+};
+{% endfor %}
+
+// Compare mode state
+let compareMode = false;
+let compareSelected = [];
 
 // Mark as read on page load
 document.addEventListener('DOMContentLoaded', function() {
@@ -817,10 +962,11 @@ function completeStep(stepId, content) {
         indicator.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>';
     }
 
-    // For step 5 (evaluation), render as table
+    // For step 5 (evaluation), render scorecard summary and store data
     if (stepId === 5) {
         try {
             const evalData = JSON.parse(content);
+            agentEvalData = evalData;
             textEl.innerHTML = renderEvaluationTable(evalData);
         } catch {
             textEl.textContent = content;
@@ -966,6 +1112,13 @@ function handleAgentComplete(data) {
     charCount.textContent = `${data.final_draft.length}자`;
     resultPanel.classList.remove('hidden');
 
+    // Auto-render evaluation scorecard from step 5 data
+    if (agentEvalData) {
+        const scorecardPanel = document.getElementById('agent-scorecard-panel');
+        scorecardPanel.classList.remove('hidden');
+        renderEvaluationScorecard(agentEvalData, 'agent-scorecard-panel');
+    }
+
     // Collapse step details
     for (let i = 0; i <= 5; i++) {
         const contentEl = document.getElementById(`step-content-${i}`);
@@ -1007,53 +1160,119 @@ function appendStepContent(stepId, content) {
     if (textEl) textEl.textContent += content;
 }
 
-// --- Evaluation ---
+// --- Evaluation Scorecard ---
 
-function renderEvaluationTable(evalData) {
-    if (evalData.error) return `<p class="text-red-500">${evalData.error}</p>`;
+let agentEvalData = null; // stored from step 5 for agent result panel
 
-    let html = `<div class="mt-2">
-        <div class="flex items-center mb-2">
-            <span class="text-sm font-medium">종합 점수: </span>
-            <span class="ml-2 px-2 py-0.5 text-sm font-bold rounded ${evalData.overall_score >= 80 ? 'bg-green-100 text-green-700' : evalData.overall_score >= 60 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}">${evalData.overall_score}점</span>
-        </div>
-        <table class="w-full text-sm border">
-            <thead><tr class="bg-gray-50">
-                <th class="px-3 py-1.5 text-left border">카테고리</th>
-                <th class="px-3 py-1.5 text-left border">규칙</th>
-                <th class="px-3 py-1.5 text-center border">결과</th>
-                <th class="px-3 py-1.5 text-left border">코멘트</th>
-            </tr></thead><tbody>`;
+function renderEvaluationScorecard(evalData, containerId) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
 
-    if (evalData.items) {
-        evalData.items.forEach(item => {
-            html += `<tr>
-                <td class="px-3 py-1.5 border text-gray-600">${item.category}</td>
-                <td class="px-3 py-1.5 border">${item.rule}</td>
-                <td class="px-3 py-1.5 border text-center">${item.pass ? '<span class="eval-pass font-bold">PASS</span>' : '<span class="eval-fail font-bold">FAIL</span>'}</td>
-                <td class="px-3 py-1.5 border text-gray-600">${item.comment}</td>
-            </tr>`;
-        });
+    const data = typeof evalData === 'string' ? JSON.parse(evalData) : evalData;
+    if (data.error) {
+        container.innerHTML = `<p class="text-red-500 text-sm">${escapeHtml(data.error)}</p>`;
+        return;
     }
 
-    html += `</tbody></table>`;
-    if (evalData.summary) html += `<p class="mt-2 text-sm text-gray-600">${evalData.summary}</p>`;
+    const score = data.overall_score || 0;
+    const scoreColorClass = score >= 80 ? 'score-green' : score >= 60 ? 'score-yellow' : 'score-red';
+
+    // Group items by category
+    const groups = {};
+    const categoryOrder = ['문체', '구조', '금지', '형식'];
+    (data.items || []).forEach(item => {
+        if (!groups[item.category]) groups[item.category] = [];
+        groups[item.category].push(item);
+    });
+
+    // Score header
+    let html = `<div class="p-4 space-y-4">
+        <div class="flex items-center gap-4">
+            <div class="scorecard-score-circle ${scoreColorClass}">
+                <span class="score-number">${score}</span>
+                <span class="score-label">점</span>
+            </div>
+            <div>
+                <div class="text-sm font-semibold text-gray-700">가이드라인 평가</div>
+                <div class="text-xs text-gray-500">${(data.items || []).filter(i => i.pass).length}/${(data.items || []).length} 항목 통과</div>
+            </div>
+        </div>`;
+
+    // Category groups
+    const categoryColors = { '문체': 'indigo', '구조': 'blue', '금지': 'red', '형식': 'gray' };
+    const orderedCategories = categoryOrder.filter(c => groups[c]);
+    // Add any extra categories not in the predefined order
+    Object.keys(groups).forEach(c => { if (!orderedCategories.includes(c)) orderedCategories.push(c); });
+
+    html += `<div class="space-y-3">`;
+    orderedCategories.forEach(cat => {
+        const items = groups[cat];
+        const passCount = items.filter(i => i.pass).length;
+        const allPass = passCount === items.length;
+        const allFail = passCount === 0;
+        const borderClass = allPass ? 'cat-pass' : allFail ? 'cat-fail' : 'cat-mixed';
+        const color = categoryColors[cat] || 'gray';
+
+        html += `<div class="scorecard-category ${borderClass}">
+            <div class="flex items-center justify-between mb-1">
+                <span class="text-xs font-semibold text-${color}-600 uppercase">${escapeHtml(cat)}</span>
+                <span class="text-xs text-gray-400">${passCount}/${items.length}</span>
+            </div>
+            <div class="space-y-1">`;
+
+        items.forEach(item => {
+            const icon = item.pass
+                ? '<span class="scorecard-item-pass font-bold">✓</span>'
+                : '<span class="scorecard-item-fail font-bold">✗</span>';
+            html += `<div class="flex items-start gap-2 text-xs">
+                <span class="flex-shrink-0 w-4 text-center">${icon}</span>
+                <span class="text-gray-700">${escapeHtml(item.rule)}</span>
+                <span class="text-gray-400 ml-auto flex-shrink-0">${escapeHtml(item.comment)}</span>
+            </div>`;
+        });
+
+        html += `</div></div>`;
+    });
     html += `</div>`;
+
+    // Summary
+    if (data.summary) {
+        html += `<div class="text-xs text-gray-500 pt-2 border-t">${escapeHtml(data.summary)}</div>`;
+    }
+
+    html += `</div>`;
+    container.innerHTML = html;
+}
+
+// Legacy function kept for agent step 5 timeline rendering
+function renderEvaluationTable(evalData) {
+    if (evalData.error) return `<p class="text-red-500">${evalData.error}</p>`;
+    // Use scorecard format inline
+    const score = evalData.overall_score || 0;
+    const scoreColorClass = score >= 80 ? 'score-green' : score >= 60 ? 'score-yellow' : 'score-red';
+    let html = `<div class="flex items-center gap-3 mt-2">
+        <div class="scorecard-score-circle ${scoreColorClass}" style="width:48px;height:48px;">
+            <span style="font-size:20px;font-weight:700;line-height:1">${score}</span>
+            <span style="font-size:9px;opacity:0.8">점</span>
+        </div>
+        <span class="text-sm text-gray-600">${(evalData.items || []).filter(i => i.pass).length}/${(evalData.items || []).length} 항목 통과</span>
+    </div>`;
     return html;
 }
 
-function toggleEvaluation(draftId) {
-    const evalEl = document.getElementById(`eval-${draftId}`);
-    if (!evalEl) return;
+function toggleScorecard(draftId) {
+    const panel = document.getElementById(`scorecard-${draftId}`);
+    if (!panel) return;
 
-    if (evalEl.classList.contains('hidden')) {
+    if (panel.classList.contains('hidden')) {
         const data = draftEvaluations[draftId];
-        if (data) {
-            evalEl.innerHTML = renderEvaluationTable(data);
+        if (data && !panel.dataset.rendered) {
+            renderEvaluationScorecard(data, `scorecard-${draftId}`);
+            panel.dataset.rendered = '1';
         }
-        evalEl.classList.remove('hidden');
+        panel.classList.remove('hidden');
     } else {
-        evalEl.classList.add('hidden');
+        panel.classList.add('hidden');
     }
 }
 
@@ -1073,6 +1292,149 @@ async function finalizeDraft(draftId) {
     }
 }
 
+// --- Draft Compare Mode ---
+
+function toggleCompareMode() {
+    compareMode = !compareMode;
+    compareSelected = [];
+    const btn = document.getElementById('compare-btn');
+    const checkboxes = document.querySelectorAll('.compare-checkbox');
+
+    if (compareMode) {
+        btn.textContent = '비교 취소';
+        btn.className = 'px-4 py-2 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium';
+        checkboxes.forEach(cb => { cb.classList.remove('hidden'); cb.checked = false; });
+    } else {
+        btn.textContent = '비교';
+        btn.className = 'px-4 py-2 text-sm bg-emerald-100 text-emerald-700 rounded-lg hover:bg-emerald-200 font-medium';
+        checkboxes.forEach(cb => cb.classList.add('hidden'));
+        closeComparePanel();
+    }
+}
+
+function onCompareSelect(draftId) {
+    const cb = document.getElementById(`compare-cb-${draftId}`);
+    if (cb.checked) {
+        if (compareSelected.length >= 2) {
+            // Uncheck the oldest selection
+            const oldId = compareSelected.shift();
+            document.getElementById(`compare-cb-${oldId}`).checked = false;
+        }
+        compareSelected.push(draftId);
+    } else {
+        compareSelected = compareSelected.filter(id => id !== draftId);
+    }
+
+    if (compareSelected.length === 2) {
+        renderComparePanel(compareSelected[0], compareSelected[1]);
+    } else {
+        closeComparePanel();
+    }
+}
+
+function renderComparePanel(id1, id2) {
+    const panel = document.getElementById('compare-panel');
+    const container = document.getElementById('compare-content');
+
+    const d1 = allDrafts[id1];
+    const d2 = allDrafts[id2];
+    if (!d1 || !d2) return;
+
+    const content1 = document.getElementById(`draft-${id1}`)?.textContent || d1.content;
+    const content2 = document.getElementById(`draft-${id2}`)?.textContent || d2.content;
+
+    const len1 = content1.length;
+    const len2 = content2.length;
+    const maxLen = Math.max(len1, len2, 1);
+
+    const eval1 = draftEvaluations[id1];
+    const eval2 = draftEvaluations[id2];
+
+    function getHook(text) {
+        const lines = text.split('\n');
+        return lines[0] || '';
+    }
+
+    function getScoreColor(s) {
+        if (s >= 80) return 'bg-green-100 text-green-700';
+        if (s >= 60) return 'bg-yellow-100 text-yellow-700';
+        return 'bg-red-100 text-red-700';
+    }
+
+    function getCharClass(len) {
+        if (len > 3000) return 'bg-red-500';
+        if (len > 2000) return 'bg-yellow-500';
+        return 'bg-green-500';
+    }
+
+    function getScenarioName(sc) {
+        return scenarios[sc] ? `${sc}: ${scenarios[sc].name}` : (sc || '-');
+    }
+
+    function renderSide(draft, content, evalData, charLen) {
+        const hook = getHook(content);
+        const scoreBadge = evalData && evalData.overall_score != null
+            ? `<span class="px-2 py-0.5 text-xs font-bold rounded ${getScoreColor(evalData.overall_score)}">${evalData.overall_score}점</span>`
+            : '<span class="text-xs text-gray-400">평가 없음</span>';
+        const barPct = Math.round((charLen / maxLen) * 100);
+        const isFinal = draft.status === 'final';
+
+        return `
+            <div class="compare-card ${isFinal ? 'selected-final' : ''}">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-2">
+                        <span class="px-2 py-0.5 text-xs font-medium bg-purple-100 text-purple-800 rounded">${getScenarioName(draft.scenario)}</span>
+                        <span class="text-xs text-gray-500">v${draft.version}</span>
+                        ${draft.generation_mode === 'agent' ? '<span class="px-1.5 py-0.5 text-xs bg-purple-50 text-purple-600 rounded">Agent</span>' : ''}
+                        ${isFinal ? '<span class="px-1.5 py-0.5 text-xs bg-green-100 text-green-700 rounded font-medium">Final</span>' : ''}
+                    </div>
+                    ${scoreBadge}
+                </div>
+                <div class="compare-hook mb-3">${escapeHtml(hook)}</div>
+                <div class="text-sm text-gray-600 whitespace-pre-wrap max-h-40 overflow-y-auto mb-3">${escapeHtml(content.substring(hook.length).trim())}</div>
+                <div class="mb-3">
+                    <div class="flex items-center justify-between text-xs text-gray-500 mb-1">
+                        <span>글자수</span>
+                        <span class="font-medium ${charLen > 3000 ? 'text-red-600' : charLen > 2000 ? 'text-yellow-600' : 'text-green-600'}">${charLen}자</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div class="compare-bar ${getCharClass(charLen)}" style="width: ${barPct}%"></div>
+                    </div>
+                </div>
+                ${!isFinal ? `<button onclick="finalizeFromCompare(${draft.id})" class="w-full py-2 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700">이 버전 사용</button>` : '<div class="text-center text-sm text-green-600 font-medium py-2">선택된 버전</div>'}
+            </div>
+        `;
+    }
+
+    container.innerHTML = renderSide(d1, content1, eval1, len1) + renderSide(d2, content2, eval2, len2);
+    panel.classList.remove('hidden');
+    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function closeComparePanel() {
+    document.getElementById('compare-panel').classList.add('hidden');
+}
+
+async function finalizeFromCompare(draftId) {
+    try {
+        const resp = await fetch(`/api/linkedin/drafts/${draftId}/finalize`, { method: 'POST' });
+        if (resp.ok) {
+            showToast('이 버전으로 확정!', 'success');
+            setTimeout(() => location.reload(), 500);
+        } else {
+            showToast('확정 실패', 'error');
+        }
+    } catch (e) {
+        showToast('오류 발생', 'error');
+    }
+}
+
 // Remove "no drafts" message when a draft is generated
 document.body.addEventListener('htmx:afterSwap', function(evt) {
     if (evt.detail.target.id === 'drafts-container') {
@@ -1081,6 +1443,38 @@ document.body.addEventListener('htmx:afterSwap', function(evt) {
         showToast('Draft generated successfully!', 'success');
     }
 });
+
+// --- Quick Refine Prompts ---
+
+const QUICK_REFINE_PROMPTS = [
+    { label: '훅 강화', prompt: '첫 줄(훅)을 더 강렬하고 호기심을 유발하도록 수정해줘. 숫자, 질문, 역설 등 강한 훅 기법을 사용해.' },
+    { label: '본문 축약', prompt: '본문을 더 간결하게 축약해줘. 핵심 메시지는 유지하되 불필요한 문장과 반복을 제거해.' },
+    { label: '톤 부드럽게', prompt: '전체적인 톤을 부드럽고 친근하게 바꿔줘. 딱딱한 표현을 대화하는 듯한 자연스러운 문체로 수정해.' },
+    { label: '데이터 추가', prompt: '설득력을 높이기 위해 구체적인 수치, 통계, 연구 결과 등 데이터 포인트를 추가해줘.' },
+    { label: '마무리 교체', prompt: '마지막 문단(마무리/CTA)을 새로운 방식으로 교체해줘. 독자의 행동을 유도하거나 생각할 거리를 남기는 마무리로.' },
+];
+
+function sendQuickRefine(promptText, targetType, targetId) {
+    if (targetType === 'agent') {
+        const input = document.getElementById('chat-input');
+        input.value = promptText;
+        sendChatMessage();
+    } else if (targetType === 'draft') {
+        const input = document.getElementById(`draft-chat-input-${targetId}`);
+        input.value = promptText;
+        sendDraftChat(targetId);
+    }
+}
+
+function renderQuickRefineButtons(containerId, targetType, targetId) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.innerHTML = QUICK_REFINE_PROMPTS.map(qr =>
+        `<button onclick="sendQuickRefine(\`${qr.prompt}\`, '${targetType}'${targetId !== undefined ? `, ${targetId}` : ''})"
+                title="${qr.prompt}"
+                class="px-2.5 py-1 text-xs bg-gray-100 text-gray-600 rounded-full hover:bg-purple-100 hover:text-purple-700 transition">${qr.label}</button>`
+    ).join('');
+}
 
 // --- Chat ---
 
@@ -1210,16 +1604,16 @@ function updateEditorCharCount() {
     const len = textarea.value.length;
 
     let colorClass, label;
-    if (len < 1200) {
+    if (len < 1800) {
         colorClass = 'char-danger';
         label = '너무 짧음';
-    } else if (len < 1400) {
+    } else if (len < 2200) {
         colorClass = 'char-warning';
         label = '짧음';
-    } else if (len <= 1600) {
+    } else if (len <= 2600) {
         colorClass = 'char-ideal';
         label = '이상적 범위';
-    } else if (len <= 1800) {
+    } else if (len <= 2800) {
         colorClass = 'char-warning';
         label = '약간 김';
     } else {
@@ -1383,18 +1777,18 @@ function updateDraftEditCharCount(draftId) {
 // --- Char Count Helpers ---
 
 function getCharCountClass(len) {
-    if (len < 1200) return 'char-danger';
-    if (len < 1400) return 'char-warning';
-    if (len <= 1600) return 'char-ideal';
-    if (len <= 1800) return 'char-warning';
+    if (len < 1800) return 'char-danger';
+    if (len < 2200) return 'char-warning';
+    if (len <= 2600) return 'char-ideal';
+    if (len <= 2800) return 'char-warning';
     return 'char-danger';
 }
 
 function getCharCountLabel(len) {
-    if (len < 1200) return '너무 짧음';
-    if (len < 1400) return '짧음';
-    if (len <= 1600) return '이상적 범위';
-    if (len <= 1800) return '약간 김';
+    if (len < 1800) return '너무 짧음';
+    if (len < 2200) return '짧음';
+    if (len <= 2600) return '이상적 범위';
+    if (len <= 2800) return '약간 김';
     return '너무 김';
 }
 
@@ -1405,13 +1799,19 @@ function updateDraftCharBadge(draftId, charCount) {
     }
 }
 
-// Initialize char count badges on page load
+// Initialize char count badges and quick refine buttons on page load
 document.addEventListener('DOMContentLoaded', function() {
     {% for draft in drafts %}
     (function() {
         const el = document.getElementById('draft-{{ draft.id }}');
         if (el) updateDraftCharBadge({{ draft.id }}, el.textContent.length);
     })();
+    {% endfor %}
+
+    // Render quick refine buttons
+    renderQuickRefineButtons('agent-quick-refine', 'agent');
+    {% for draft in drafts %}
+    renderQuickRefineButtons('draft-quick-refine-{{ draft.id }}', 'draft', {{ draft.id }});
     {% endfor %}
 });
 
@@ -1762,6 +2162,12 @@ document.addEventListener('keydown', function(e) {
             e.preventDefault();
             if (!document.getElementById('hook-lab-btn').disabled) {
                 startHookLab();
+            }
+            break;
+        case 'c':
+            e.preventDefault();
+            if (document.getElementById('compare-btn')) {
+                toggleCompareMode();
             }
             break;
     }

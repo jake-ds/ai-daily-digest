@@ -232,7 +232,7 @@
                                       class="w-full border rounded-lg px-3 py-2 text-sm"
                                       placeholder="LinkedIn 포스팅 전문을 붙여넣으세요..."></textarea>
                         </div>
-                        <div class="grid grid-cols-2 gap-4">
+                        <div class="grid grid-cols-3 gap-4">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">작성자</label>
                                 <input type="text" id="ref-author" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="작성자 이름">
@@ -240,6 +240,15 @@
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">URL</label>
                                 <input type="text" id="ref-url" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="https://linkedin.com/posts/...">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">시나리오</label>
+                                <select id="ref-scenario" class="w-full border rounded-lg px-3 py-2 text-sm">
+                                    <option value="">자동 감지</option>
+                                    {% for key, scenario in scenarios.items() %}
+                                    <option value="{{ key }}">{{ key }}: {{ scenario.name }}</option>
+                                    {% endfor %}
+                                </select>
                             </div>
                         </div>
                         <button onclick="analyzeReference()" id="analyze-btn"
@@ -271,11 +280,56 @@
             <!-- Reference Posts List -->
             <div class="space-y-4">
                 <div class="bg-white rounded-lg shadow p-4">
-                    <h2 class="font-semibold text-gray-900 mb-4">등록된 레퍼런스</h2>
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="font-semibold text-gray-900">등록된 레퍼런스</h2>
+                    </div>
+                    <!-- Scenario Filter -->
+                    <div class="flex flex-wrap gap-1 mb-3">
+                        <button onclick="filterByScenario(null)" id="filter-all"
+                                class="px-2 py-1 text-xs font-medium rounded-full bg-gray-800 text-white">전체</button>
+                        {% for key in scenarios.keys() %}
+                        <button onclick="filterByScenario('{{ key }}')" id="filter-{{ key }}"
+                                class="px-2 py-1 text-xs font-medium rounded-full scenario-filter-btn
+                                {% if key == 'A' %}bg-blue-100 text-blue-700
+                                {% elif key == 'B' %}bg-green-100 text-green-700
+                                {% elif key == 'C' %}bg-purple-100 text-purple-700
+                                {% elif key == 'D' %}bg-orange-100 text-orange-700
+                                {% elif key == 'E' %}bg-rose-100 text-rose-700
+                                {% else %}bg-teal-100 text-teal-700{% endif %}">{{ key }}</button>
+                        {% endfor %}
+                        <button onclick="filterByScenario('none')" id="filter-none"
+                                class="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-500">미지정</button>
+                    </div>
                     <div id="reference-list" class="space-y-3">
                         {% if reference_posts %}
                         {% for ref in reference_posts %}
-                        <div class="p-3 bg-gray-50 rounded-lg" id="ref-item-{{ ref.id }}">
+                        <div class="p-3 bg-gray-50 rounded-lg ref-card" id="ref-item-{{ ref.id }}" data-scenario="{{ ref.scenario or '' }}">
+                            <div class="flex items-center justify-between mb-1">
+                                <div class="relative">
+                                    <button onclick="toggleScenarioDropdown(event, {{ ref.id }})"
+                                            id="scenario-badge-{{ ref.id }}"
+                                            class="scenario-badge px-2 py-0.5 text-xs font-medium rounded-full cursor-pointer hover:opacity-80 transition
+                                            {% if ref.scenario == 'A' %}bg-blue-100 text-blue-700
+                                            {% elif ref.scenario == 'B' %}bg-green-100 text-green-700
+                                            {% elif ref.scenario == 'C' %}bg-purple-100 text-purple-700
+                                            {% elif ref.scenario == 'D' %}bg-orange-100 text-orange-700
+                                            {% elif ref.scenario == 'E' %}bg-rose-100 text-rose-700
+                                            {% elif ref.scenario == 'F' %}bg-teal-100 text-teal-700
+                                            {% else %}bg-gray-200 text-gray-500{% endif %}">
+                                        {{ ref.scenario or '?' }}
+                                    </button>
+                                    <div id="scenario-dropdown-{{ ref.id }}" class="hidden absolute left-0 top-full mt-1 bg-white border rounded-lg shadow-lg z-10 py-1 w-32">
+                                        <button onclick="updateScenario({{ ref.id }}, 'A')" class="w-full text-left px-3 py-1.5 text-xs hover:bg-blue-50 text-blue-700">A: 산업 분석</button>
+                                        <button onclick="updateScenario({{ ref.id }}, 'B')" class="w-full text-left px-3 py-1.5 text-xs hover:bg-green-50 text-green-700">B: 제품 리뷰</button>
+                                        <button onclick="updateScenario({{ ref.id }}, 'C')" class="w-full text-left px-3 py-1.5 text-xs hover:bg-purple-50 text-purple-700">C: 개인 회고</button>
+                                        <button onclick="updateScenario({{ ref.id }}, 'D')" class="w-full text-left px-3 py-1.5 text-xs hover:bg-orange-50 text-orange-700">D: 시장 시그널</button>
+                                        <button onclick="updateScenario({{ ref.id }}, 'E')" class="w-full text-left px-3 py-1.5 text-xs hover:bg-rose-50 text-rose-700">E: 의사결정</button>
+                                        <button onclick="updateScenario({{ ref.id }}, 'F')" class="w-full text-left px-3 py-1.5 text-xs hover:bg-teal-50 text-teal-700">F: 기타</button>
+                                        <hr class="my-1">
+                                        <button onclick="updateScenario({{ ref.id }}, null)" class="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 text-gray-500">미지정</button>
+                                    </div>
+                                </div>
+                            </div>
                             <p class="text-sm text-gray-700 line-clamp-3">{{ ref.content[:150] }}...</p>
                             <div class="flex items-center justify-between mt-2 text-xs text-gray-500">
                                 <span>{{ ref.author or '작성자 미상' }} | {{ ref.created_at.strftime('%m/%d') if ref.created_at else '' }}</span>
@@ -484,6 +538,7 @@ async function analyzeReference() {
     btn.innerHTML = '<svg class="animate-spin h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> 분석 중...';
 
     try {
+        const scenarioVal = document.getElementById('ref-scenario').value || null;
         const response = await fetch('/api/settings/reference-posts', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -491,6 +546,7 @@ async function analyzeReference() {
                 content: content,
                 author: document.getElementById('ref-author').value.trim() || null,
                 source_url: document.getElementById('ref-url').value.trim() || null,
+                scenario: scenarioVal,
             })
         });
 
@@ -506,6 +562,7 @@ async function analyzeReference() {
         document.getElementById('ref-content').value = '';
         document.getElementById('ref-author').value = '';
         document.getElementById('ref-url').value = '';
+        document.getElementById('ref-scenario').value = '';
 
     } catch (e) {
         showToast('분석에 실패했습니다: ' + e.message, 'error');
@@ -667,10 +724,36 @@ function addReferenceToList(post) {
     const noMsg = document.getElementById('no-refs-message');
     if (noMsg) noMsg.remove();
 
+    const scenario = post.scenario || '';
+    const style = scenario ? SCENARIO_STYLES[scenario] : null;
+    const badgeBg = style ? style.bg : 'bg-gray-200';
+    const badgeText = style ? style.text : 'text-gray-500';
+    const badgeLabel = scenario || '?';
+
     const el = document.createElement('div');
-    el.className = 'p-3 bg-gray-50 rounded-lg';
+    el.className = 'p-3 bg-gray-50 rounded-lg ref-card';
     el.id = `ref-item-${post.id}`;
+    el.dataset.scenario = scenario;
     el.innerHTML = `
+        <div class="flex items-center justify-between mb-1">
+            <div class="relative">
+                <button onclick="toggleScenarioDropdown(event, ${post.id})"
+                        id="scenario-badge-${post.id}"
+                        class="scenario-badge px-2 py-0.5 text-xs font-medium rounded-full cursor-pointer hover:opacity-80 transition ${badgeBg} ${badgeText}">
+                    ${badgeLabel}
+                </button>
+                <div id="scenario-dropdown-${post.id}" class="hidden absolute left-0 top-full mt-1 bg-white border rounded-lg shadow-lg z-10 py-1 w-32">
+                    <button onclick="updateScenario(${post.id}, 'A')" class="w-full text-left px-3 py-1.5 text-xs hover:bg-blue-50 text-blue-700">A: 산업 분석</button>
+                    <button onclick="updateScenario(${post.id}, 'B')" class="w-full text-left px-3 py-1.5 text-xs hover:bg-green-50 text-green-700">B: 제품 리뷰</button>
+                    <button onclick="updateScenario(${post.id}, 'C')" class="w-full text-left px-3 py-1.5 text-xs hover:bg-purple-50 text-purple-700">C: 개인 회고</button>
+                    <button onclick="updateScenario(${post.id}, 'D')" class="w-full text-left px-3 py-1.5 text-xs hover:bg-orange-50 text-orange-700">D: 시장 시그널</button>
+                    <button onclick="updateScenario(${post.id}, 'E')" class="w-full text-left px-3 py-1.5 text-xs hover:bg-rose-50 text-rose-700">E: 의사결정</button>
+                    <button onclick="updateScenario(${post.id}, 'F')" class="w-full text-left px-3 py-1.5 text-xs hover:bg-teal-50 text-teal-700">F: 기타</button>
+                    <hr class="my-1">
+                    <button onclick="updateScenario(${post.id}, null)" class="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 text-gray-500">미지정</button>
+                </div>
+            </div>
+        </div>
         <p class="text-sm text-gray-700 line-clamp-3">${post.content.substring(0, 150)}...</p>
         <div class="flex items-center justify-between mt-2 text-xs text-gray-500">
             <span>${post.author || '작성자 미상'} | ${new Date().toLocaleDateString('ko-KR', {month: '2-digit', day: '2-digit'})}</span>
@@ -694,6 +777,114 @@ async function deleteReference(id) {
     } catch (e) {
         showToast('삭제 실패', 'error');
     }
+}
+
+// --- Scenario Tagging ---
+
+const SCENARIO_STYLES = {
+    'A': { bg: 'bg-blue-100', text: 'text-blue-700' },
+    'B': { bg: 'bg-green-100', text: 'text-green-700' },
+    'C': { bg: 'bg-purple-100', text: 'text-purple-700' },
+    'D': { bg: 'bg-orange-100', text: 'text-orange-700' },
+    'E': { bg: 'bg-rose-100', text: 'text-rose-700' },
+    'F': { bg: 'bg-teal-100', text: 'text-teal-700' },
+};
+
+let activeScenarioFilter = null;
+
+function toggleScenarioDropdown(event, postId) {
+    event.stopPropagation();
+    // Close all other dropdowns
+    document.querySelectorAll('[id^="scenario-dropdown-"]').forEach(dd => {
+        if (dd.id !== `scenario-dropdown-${postId}`) dd.classList.add('hidden');
+    });
+    document.getElementById(`scenario-dropdown-${postId}`).classList.toggle('hidden');
+}
+
+// Close dropdowns on outside click
+document.addEventListener('click', function() {
+    document.querySelectorAll('[id^="scenario-dropdown-"]').forEach(dd => dd.classList.add('hidden'));
+});
+
+async function updateScenario(postId, scenario) {
+    document.getElementById(`scenario-dropdown-${postId}`).classList.add('hidden');
+
+    try {
+        const resp = await fetch(`/api/settings/reference-posts/${postId}/scenario`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ scenario: scenario })
+        });
+        if (!resp.ok) throw new Error('Update failed');
+
+        // Update badge appearance
+        const badge = document.getElementById(`scenario-badge-${postId}`);
+        const card = document.getElementById(`ref-item-${postId}`);
+        const style = scenario ? SCENARIO_STYLES[scenario] : null;
+
+        // Remove all scenario classes
+        Object.values(SCENARIO_STYLES).forEach(s => {
+            badge.classList.remove(s.bg, s.text);
+        });
+        badge.classList.remove('bg-gray-200', 'text-gray-500');
+
+        if (style) {
+            badge.classList.add(style.bg, style.text);
+            badge.textContent = scenario;
+            card.dataset.scenario = scenario;
+        } else {
+            badge.classList.add('bg-gray-200', 'text-gray-500');
+            badge.textContent = '?';
+            card.dataset.scenario = '';
+        }
+
+        // Re-apply filter if active
+        if (activeScenarioFilter !== null) filterByScenario(activeScenarioFilter);
+
+        showToast(`시나리오 ${scenario || '미지정'}으로 변경됨`, 'success');
+    } catch (e) {
+        showToast('시나리오 변경 실패', 'error');
+    }
+}
+
+function filterByScenario(scenario) {
+    activeScenarioFilter = scenario;
+
+    // Update filter button styles
+    document.getElementById('filter-all').className = scenario === null
+        ? 'px-2 py-1 text-xs font-medium rounded-full bg-gray-800 text-white'
+        : 'px-2 py-1 text-xs font-medium rounded-full bg-gray-200 text-gray-600 hover:bg-gray-300';
+
+    const filterNone = document.getElementById('filter-none');
+    if (filterNone) {
+        filterNone.className = scenario === 'none'
+            ? 'px-2 py-1 text-xs font-medium rounded-full bg-gray-800 text-white'
+            : 'px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200';
+    }
+
+    document.querySelectorAll('.scenario-filter-btn').forEach(btn => {
+        const key = btn.id.replace('filter-', '');
+        const style = SCENARIO_STYLES[key];
+        if (style) {
+            if (scenario === key) {
+                btn.className = `px-2 py-1 text-xs font-medium rounded-full scenario-filter-btn ${style.bg.replace('100', '600')} text-white`;
+            } else {
+                btn.className = `px-2 py-1 text-xs font-medium rounded-full scenario-filter-btn ${style.bg} ${style.text}`;
+            }
+        }
+    });
+
+    // Filter cards
+    document.querySelectorAll('.ref-card').forEach(card => {
+        const cardScenario = card.dataset.scenario;
+        if (scenario === null) {
+            card.classList.remove('hidden');
+        } else if (scenario === 'none') {
+            card.classList.toggle('hidden', cardScenario !== '');
+        } else {
+            card.classList.toggle('hidden', cardScenario !== scenario);
+        }
+    });
 }
 
 // Keyboard shortcut for save

@@ -37,6 +37,11 @@ class ReferencePostCreate(BaseModel):
     content: str = Field(..., min_length=10)
     author: Optional[str] = None
     source_url: Optional[str] = None
+    scenario: Optional[str] = Field(default=None, pattern="^[A-F]$")
+
+
+class ReferencePostScenarioUpdate(BaseModel):
+    scenario: Optional[str] = Field(default=None, pattern="^[A-F]$")
 
 
 class SuggestionApply(BaseModel):
@@ -133,6 +138,7 @@ async def create_reference_post(
             author=data.author,
             source_url=data.source_url,
             analysis=analysis,
+            scenario=data.scenario,
         )
 
         return {
@@ -146,9 +152,15 @@ async def create_reference_post(
 
 
 @router.get("/reference-posts")
-async def get_reference_posts(db: Session = Depends(get_db)):
-    """Get all reference posts."""
-    posts = db.query(ReferencePost).order_by(ReferencePost.created_at.desc()).all()
+async def get_reference_posts(
+    scenario: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    """Get all reference posts, optionally filtered by scenario."""
+    query = db.query(ReferencePost)
+    if scenario:
+        query = query.filter(ReferencePost.scenario == scenario)
+    posts = query.order_by(ReferencePost.created_at.desc()).all()
     return {
         "posts": [p.to_dict() for p in posts],
         "total": len(posts),
@@ -168,6 +180,22 @@ async def delete_reference_post(
     db.delete(post)
     db.commit()
     return {"success": True}
+
+
+@router.patch("/reference-posts/{post_id}/scenario")
+async def update_reference_post_scenario(
+    post_id: int,
+    data: ReferencePostScenarioUpdate,
+    db: Session = Depends(get_db),
+):
+    """Update the scenario tag of a reference post."""
+    post = db.query(ReferencePost).filter(ReferencePost.id == post_id).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Reference post not found")
+
+    post.scenario = data.scenario
+    db.commit()
+    return {"success": True, "post": post.to_dict()}
 
 
 @router.post("/guidelines/apply-suggestion")

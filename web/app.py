@@ -222,6 +222,7 @@ async def article_detail(
             "recommended_scenario": scenario_result["scenario"],
             "scenario_reason": scenario_result.get("reason", ""),
             "scenario_confidence": scenario_result.get("confidence", 0),
+            "scenario_alternatives": scenario_result.get("alternatives", []),
         },
     )
 
