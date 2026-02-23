@@ -150,9 +150,15 @@
                             </div>
                         </div>
                         <div class="ml-4 flex items-center space-x-2">
-                            <span class="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded">
+                            {% if article.ai_score %}
+                            <span class="px-2 py-1 text-xs font-bold bg-blue-100 text-blue-800 rounded" title="AI Score">
+                                AI {{ "%.1f"|format(article.ai_score) }}
+                            </span>
+                            {% else %}
+                            <span class="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-600 rounded">
                                 {{ "%.1f"|format(article.score) }}
                             </span>
+                            {% endif %}
                             {% if article.linkedin_status != 'none' %}
                             <span class="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded">
                                 LinkedIn
@@ -188,8 +194,9 @@ const PROGRESS_STAGES = {
     'enriching': { name: '논문 보강', icon: '📚', order: 6, desc: 'arXiv 논문 기관 정보 추가' },
     'summarizing': { name: 'AI 요약', icon: '✨', order: 7, desc: 'Claude API로 한국어 요약 생성' },
     'storing': { name: 'DB 저장', icon: '💾', order: 8, desc: '로컬 데이터베이스에 저장' },
-    'syncing_notion': { name: 'Notion 동기화', icon: '📝', order: 9, desc: 'Notion 페이지 생성' },
-    'completed': { name: '완료', icon: '✅', order: 10, desc: '수집 완료' },
+    'evaluating': { name: 'AI 평가', icon: '🧠', order: 9, desc: 'Claude AI로 기사 품질 평가' },
+    'syncing_notion': { name: 'Notion 동기화', icon: '📝', order: 10, desc: 'Notion 페이지 생성' },
+    'completed': { name: '완료', icon: '✅', order: 11, desc: '수집 완료' },
     'failed': { name: '실패', icon: '❌', order: -1, desc: '오류 발생' },
 };
 
@@ -214,7 +221,7 @@ const activePollers = {};
 function createProgressUI(data) {
     const stage = PROGRESS_STAGES[data.progress_stage] || PROGRESS_STAGES['starting'];
     const stageOrder = stage.order;
-    const totalSteps = 10;
+    const totalSteps = 11;
     const progressPercent = stageOrder >= 0 ? Math.round((stageOrder / totalSteps) * 100) : 0;
     const typeLabel = TYPE_LABELS[data.type] || data.type;
 

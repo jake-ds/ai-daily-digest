@@ -366,7 +366,7 @@ Lenny's Newsletter 커뮤니티에서 이 주제로 논의가 있었습니다.
             return LinkedInPost(
                 article_title=article.title,
                 article_url=article.url,
-                evaluation_score=evaluation.total_score,
+                evaluation_score=evaluation.ai_score,
                 post_content=post_content,
                 hashtags=hashtags[:7],
                 estimated_read_time=read_time,

@@ -98,6 +98,20 @@ class DigestService:
             stored_count = self._store_articles(articles, collection.id)
             self._update_progress(collection.id, "storing", f"{stored_count}개 기사 저장 완료")
 
+            # AI evaluation for stored articles
+            try:
+                self._update_progress(collection.id, "evaluating", "AI 평가 중...")
+                from web.services.evaluation_service import EvaluationService
+                eval_service = EvaluationService(self.db)
+                eval_result = eval_service.batch_evaluate(limit=stored_count)
+                self._update_progress(
+                    collection.id, "evaluating",
+                    f"{eval_result['processed']}개 기사 AI 평가 완료"
+                )
+            except Exception as e:
+                self._update_progress(collection.id, "evaluating", f"AI 평가 오류: {str(e)[:50]}")
+                print(f"AI evaluation error: {e}")
+
             # Sync to Notion if enabled
             notion_url = None
             if not skip_notion and articles:

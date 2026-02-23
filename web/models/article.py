@@ -21,6 +21,11 @@ class Article(Base):
     ai_summary = Column(Text, nullable=True)  # Claude-generated summary
     score = Column(Float, default=0.0)
     viral_score = Column(Float, nullable=True)
+
+    # AI evaluation scores
+    ai_score = Column(Float, nullable=True, index=True)          # AI 종합 점수 (0-10)
+    linkedin_potential = Column(Float, nullable=True)              # LinkedIn 잠재력 (0-10)
+    eval_data = Column(Text, nullable=True)                        # 전체 평가 JSON
     published_at = Column(DateTime, nullable=True)
     collected_at = Column(DateTime, default=datetime.utcnow, index=True)
 
@@ -64,6 +69,9 @@ class Article(Base):
             "ai_summary": self.ai_summary,
             "score": self.score,
             "viral_score": self.viral_score,
+            "ai_score": self.ai_score,
+            "linkedin_potential": self.linkedin_potential,
+            "eval_data": self.eval_data,
             "published_at": self.published_at.isoformat() if self.published_at else None,
             "collected_at": self.collected_at.isoformat() if self.collected_at else None,
             "collection_id": self.collection_id,

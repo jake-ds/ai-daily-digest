@@ -189,9 +189,20 @@
                 <span class="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded">
                     {{ article.category or 'unknown' }}
                 </span>
-                <span class="px-2 py-1 text-xs font-bold bg-blue-100 text-blue-800 rounded">
+                {% if article.ai_score %}
+                <span class="px-2 py-1 text-xs font-bold bg-blue-100 text-blue-800 rounded" title="AI Score">
+                    AI: {{ "%.1f"|format(article.ai_score) }}
+                </span>
+                {% if article.linkedin_potential %}
+                <span class="px-2 py-1 text-xs font-bold bg-purple-100 text-purple-800 rounded" title="LinkedIn Potential">
+                    LI: {{ "%.1f"|format(article.linkedin_potential) }}
+                </span>
+                {% endif %}
+                {% else %}
+                <span class="px-2 py-1 text-xs font-bold bg-gray-100 text-gray-600 rounded">
                     Score: {{ "%.1f"|format(article.score) }}
                 </span>
+                {% endif %}
                 {% if article.viral_score %}
                 <span class="px-2 py-1 text-xs font-bold bg-orange-100 text-orange-800 rounded">
                     Viral: {{ "%.1f"|format(article.viral_score) }}
@@ -255,6 +266,94 @@
         <p class="text-gray-500">No summary available.</p>
         {% endif %}
     </div>
+
+    <!-- AI Evaluation Breakdown -->
+    {% if article.eval_data %}
+    <div class="bg-white rounded-lg shadow p-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">AI 평가</h2>
+        <div class="flex items-center gap-6 mb-4">
+            <div class="text-center">
+                <div class="text-2xl font-bold text-blue-600">{{ "%.1f"|format(article.ai_score) }}</div>
+                <div class="text-xs text-gray-500">종합</div>
+            </div>
+            <div class="text-center">
+                <div class="text-2xl font-bold text-purple-600">{{ "%.1f"|format(article.linkedin_potential) }}</div>
+                <div class="text-xs text-gray-500">LinkedIn</div>
+            </div>
+        </div>
+        <div id="eval-breakdown" class="space-y-2"></div>
+        <div id="eval-insights" class="mt-4 space-y-2"></div>
+        <script>
+        (function() {
+            const evalData = {{ article.eval_data | safe }};
+            const dims = [
+                {key: 'curiosity', label: '호기심', icon: '💡'},
+                {key: 'insight', label: '인사이트', icon: '🎯'},
+                {key: 'relevance', label: '관련성', icon: '🔗'},
+                {key: 'timeliness', label: '시의성', icon: '⏰'},
+                {key: 'discussion', label: '토론유발', icon: '💬'},
+                {key: 'shareability', label: '공유가치', icon: '🔄'},
+                {key: 'depth', label: '깊이', icon: '📊'},
+            ];
+            const container = document.getElementById('eval-breakdown');
+            dims.forEach(d => {
+                const val = evalData[d.key] || 0;
+                const pct = val * 10;
+                const color = val >= 8 ? 'bg-green-500' : val >= 6 ? 'bg-blue-500' : val >= 4 ? 'bg-yellow-500' : 'bg-red-500';
+                container.innerHTML += `
+                    <div class="flex items-center gap-3">
+                        <span class="w-5 text-center">${d.icon}</span>
+                        <span class="w-16 text-sm text-gray-600">${d.label}</span>
+                        <div class="flex-1 bg-gray-200 rounded-full h-2.5">
+                            <div class="${color} h-2.5 rounded-full" style="width: ${pct}%"></div>
+                        </div>
+                        <span class="w-6 text-sm font-medium text-gray-700 text-right">${val}</span>
+                    </div>`;
+            });
+            const insights = document.getElementById('eval-insights');
+            if (evalData.key_insight) {
+                insights.innerHTML += `<div class="p-3 bg-blue-50 rounded-lg"><div class="text-xs font-medium text-blue-600 mb-1">핵심 인사이트</div><p class="text-sm text-gray-800">${evalData.key_insight}</p></div>`;
+            }
+            if (evalData.hook_suggestion) {
+                insights.innerHTML += `<div class="p-3 bg-purple-50 rounded-lg"><div class="text-xs font-medium text-purple-600 mb-1">훅 제안</div><p class="text-sm text-gray-800">${evalData.hook_suggestion}</p></div>`;
+            }
+        })();
+        </script>
+    </div>
+    {% elif not article.ai_score %}
+    <div class="bg-white rounded-lg shadow p-6">
+        <div class="flex items-center justify-between">
+            <h2 class="text-lg font-semibold text-gray-900">AI 평가</h2>
+            <button onclick="evaluateArticle()" id="btn-eval-single"
+                    class="px-3 py-1.5 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition">
+                AI 평가 실행
+            </button>
+        </div>
+        <p class="text-sm text-gray-500 mt-2">아직 AI 평가가 되지 않은 기사입니다.</p>
+        <script>
+        async function evaluateArticle() {
+            const btn = document.getElementById('btn-eval-single');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="animate-pulse">평가 중...</span>';
+            try {
+                const resp = await fetch('/api/articles/{{ article.id }}/evaluate', {method: 'POST'});
+                if (resp.ok) {
+                    showToast('AI 평가 완료');
+                    setTimeout(() => location.reload(), 500);
+                } else {
+                    showToast('평가 실패', 'error');
+                    btn.innerHTML = 'AI 평가 실행';
+                    btn.disabled = false;
+                }
+            } catch(e) {
+                showToast('평가 실패', 'error');
+                btn.innerHTML = 'AI 평가 실행';
+                btn.disabled = false;
+            }
+        }
+        </script>
+    </div>
+    {% endif %}
 
     <!-- LinkedIn Section -->
     <div class="bg-white rounded-lg shadow p-6">

@@ -5,9 +5,20 @@
             <span class="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded">
                 {{ article.category or 'unknown' }}
             </span>
-            <span class="px-2 py-1 text-xs font-bold bg-blue-100 text-blue-800 rounded">
+            {% if article.ai_score %}
+            <span class="px-2 py-1 text-xs font-bold bg-blue-100 text-blue-800 rounded" title="AI Score">
+                AI {{ "%.1f"|format(article.ai_score) }}
+            </span>
+            {% if article.linkedin_potential %}
+            <span class="px-2 py-1 text-xs font-bold bg-purple-100 text-purple-800 rounded" title="LinkedIn Potential">
+                LI {{ "%.1f"|format(article.linkedin_potential) }}
+            </span>
+            {% endif %}
+            {% else %}
+            <span class="px-2 py-1 text-xs font-bold bg-gray-100 text-gray-600 rounded" title="Keyword Score">
                 {{ "%.1f"|format(article.score) }}
             </span>
+            {% endif %}
         </div>
 
         <h3 class="font-semibold text-gray-900 line-clamp-2 mb-2">{{ article.title }}</h3>

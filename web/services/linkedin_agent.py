@@ -355,12 +355,15 @@ class LinkedInAgent:
             f"- 요약: {article.ai_summary or article.summary or '없음'}",
         ]
 
-        if article.score and article.score >= 8:
-            lines.append(f"- 품질 점수: {article.score}/10 (고품질 기사 → 깊은 분석과 구체적 인사이트를 포함하세요)")
-        elif article.score and article.score <= 5:
-            lines.append(f"- 품질 점수: {article.score}/10 (간결한 코멘터리와 핵심 포인트 위주로 작성하세요)")
-        elif article.score:
-            lines.append(f"- 품질 점수: {article.score}/10")
+        ai = article.ai_score if article.ai_score is not None else article.score
+        if ai and ai >= 8:
+            lines.append(f"- 품질 점수: {ai}/10 (고품질 기사 → 깊은 분석과 구체적 인사이트를 포함하세요)")
+        elif ai and ai <= 4:
+            lines.append(f"- 품질 점수: {ai}/10 (간결한 코멘터리와 핵심 포인트 위주로 작성하세요)")
+        elif ai:
+            lines.append(f"- 품질 점수: {ai}/10")
+        if article.linkedin_potential:
+            lines.append(f"- LinkedIn 잠재력: {article.linkedin_potential}/10")
 
         if article.viral_score and article.viral_score > 0:
             lines.append(f"- 바이럴 점수: {article.viral_score} (화제성 높은 뉴스 → 독자의 관심을 활용하되, 과장은 피하세요)")

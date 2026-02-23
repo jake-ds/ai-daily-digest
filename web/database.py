@@ -58,6 +58,29 @@ def migrate_db():
                         f"ALTER TABLE linkedin_drafts ADD COLUMN {col_name} {col_type}"
                     ))
 
+    # Articles 테이블 AI 평가 컬럼 마이그레이션
+    if "articles" in inspector.get_table_names():
+        existing_articles = {col["name"] for col in inspector.get_columns("articles")}
+        article_columns = {
+            "ai_score": "FLOAT",
+            "linkedin_potential": "FLOAT",
+            "eval_data": "TEXT",
+        }
+        with engine.begin() as conn:
+            for col_name, col_type in article_columns.items():
+                if col_name not in existing_articles:
+                    conn.execute(text(
+                        f"ALTER TABLE articles ADD COLUMN {col_name} {col_type}"
+                    ))
+            # ai_score 인덱스 추가
+            if "ai_score" not in existing_articles:
+                try:
+                    conn.execute(text(
+                        "CREATE INDEX ix_articles_ai_score ON articles (ai_score)"
+                    ))
+                except Exception:
+                    pass  # 인덱스 이미 존재
+
     # Reference posts 테이블 마이그레이션
     if "reference_posts" in inspector.get_table_names():
         existing_ref = {col["name"] for col in inspector.get_columns("reference_posts")}

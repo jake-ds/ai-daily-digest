@@ -8,6 +8,12 @@
     <div class="flex justify-between items-center">
         <h1 class="text-2xl font-bold text-gray-900">Articles</h1>
         <div class="flex items-center gap-3">
+            {% if unevaluated_count > 0 %}
+            <button id="btn-evaluate" onclick="batchEvaluate()"
+                    class="px-3 py-1.5 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition">
+                AI 평가 (<span id="unevaluated-count">{{ unevaluated_count }}</span>)
+            </button>
+            {% endif %}
             {% if unsummarized_count > 0 %}
             <button id="btn-summarize" onclick="batchSummarize()"
                     class="px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
@@ -58,15 +64,15 @@
                 </select>
             </div>
 
-            <!-- Score Filter -->
+            <!-- AI Score Filter -->
             <div class="flex items-center gap-2">
-                <label class="text-sm text-gray-600">Min Score:</label>
+                <label class="text-sm text-gray-600">AI Score:</label>
                 <select id="filter-min-score" class="text-sm border rounded px-2 py-1">
-                    <option value="" {% if not min_score %}selected{% endif %}>All</option>
-                    <option value="5" {% if min_score == 5 %}selected{% endif %}>5+</option>
-                    <option value="7" {% if min_score == 7 %}selected{% endif %}>7+</option>
-                    <option value="8" {% if min_score == 8 %}selected{% endif %}>8+</option>
-                    <option value="9" {% if min_score == 9 %}selected{% endif %}>9+</option>
+                    <option value="" {% if not min_ai_score %}selected{% endif %}>All</option>
+                    <option value="6" {% if min_ai_score == 6 %}selected{% endif %}>6+</option>
+                    <option value="7" {% if min_ai_score == 7 %}selected{% endif %}>7+</option>
+                    <option value="8" {% if min_ai_score == 8 %}selected{% endif %}>8+</option>
+                    <option value="9" {% if min_ai_score == 9 %}selected{% endif %}>9+</option>
                 </select>
             </div>
 
@@ -110,9 +116,20 @@
                                 <span class="text-gray-300 hover:text-yellow-400">&#9734;</span>
                                 {% endif %}
                             </button>
-                            <span class="px-2 py-1 text-xs font-bold bg-blue-100 text-blue-800 rounded">
+                            {% if article.ai_score %}
+                            <span class="px-2 py-1 text-xs font-bold bg-blue-100 text-blue-800 rounded" title="AI Score">
+                                AI {{ "%.1f"|format(article.ai_score) }}
+                            </span>
+                            {% if article.linkedin_potential %}
+                            <span class="px-2 py-1 text-xs font-bold bg-purple-100 text-purple-800 rounded" title="LinkedIn Potential">
+                                LI {{ "%.1f"|format(article.linkedin_potential) }}
+                            </span>
+                            {% endif %}
+                            {% else %}
+                            <span class="px-2 py-1 text-xs font-bold bg-gray-100 text-gray-600 rounded" title="Keyword Score">
                                 {{ "%.1f"|format(article.score) }}
                             </span>
+                            {% endif %}
                         </div>
                     </div>
 
@@ -189,7 +206,7 @@ let currentFilters = {
     q: '{{ search_query or "" }}',
     category: '{{ current_category or "" }}',
     date_range: '{{ date_range or "" }}',
-    min_score: '{{ min_score or "" }}',
+    min_ai_score: '{{ min_ai_score or "" }}',
     favorite: {{ 'true' if show_favorite else 'false' }},
     unread: {{ 'true' if show_unread else 'false' }},
     page: {{ page }}
@@ -204,7 +221,7 @@ function buildFilterUrl() {
     if (currentFilters.q) params.set('q', currentFilters.q);
     if (currentFilters.category) params.set('category', currentFilters.category);
     if (currentFilters.date_range) params.set('date_range', currentFilters.date_range);
-    if (currentFilters.min_score) params.set('min_score', currentFilters.min_score);
+    if (currentFilters.min_ai_score) params.set('min_ai_score', currentFilters.min_ai_score);
     if (currentFilters.favorite) params.set('favorite', '1');
     if (currentFilters.unread) params.set('unread', '1');
     if (currentFilters.page > 1) params.set('page', currentFilters.page);
@@ -276,6 +293,36 @@ function toggleSelectedFavorite() {
     }
 }
 
+// Batch AI evaluate
+async function batchEvaluate() {
+    const btn = document.getElementById('btn-evaluate');
+    const countSpan = document.getElementById('unevaluated-count');
+    if (!btn) return;
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="animate-pulse">AI 평가 중...</span>';
+
+    try {
+        const response = await fetch('/api/articles/batch-evaluate?limit=20', { method: 'POST' });
+        const data = await response.json();
+
+        if (data.remaining > 0) {
+            countSpan.textContent = data.remaining;
+            btn.innerHTML = `AI 평가 (<span id="unevaluated-count">${data.remaining}</span>)`;
+            btn.disabled = false;
+            showToast(`${data.processed}개 완료, ${data.remaining}개 남음`);
+        } else {
+            btn.remove();
+            showToast(data.message);
+            setTimeout(() => window.location.reload(), 500);
+        }
+    } catch (e) {
+        btn.innerHTML = 'AI 평가 (오류)';
+        btn.disabled = false;
+        showToast('AI 평가 실패', 'error');
+    }
+}
+
 // Batch summarize
 async function batchSummarize() {
     const btn = document.getElementById('btn-summarize');
@@ -330,9 +377,9 @@ document.addEventListener('DOMContentLoaded', function() {
         applyFilters();
     });
 
-    // Min score select
+    // Min AI score select
     document.getElementById('filter-min-score')?.addEventListener('change', function() {
-        currentFilters.min_score = this.value;
+        currentFilters.min_ai_score = this.value;
         applyFilters();
     });
 

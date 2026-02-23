@@ -21,8 +21,9 @@ async def get_articles(
     collection_id: Optional[int] = Query(default=None),
     favorite: Optional[bool] = Query(default=None, description="Filter favorites only"),
     unread: Optional[bool] = Query(default=None, description="Filter unread only"),
-    min_score: Optional[float] = Query(default=None, description="Minimum score filter"),
-    max_score: Optional[float] = Query(default=None, description="Maximum score filter"),
+    min_score: Optional[float] = Query(default=None, description="Minimum keyword score filter"),
+    max_score: Optional[float] = Query(default=None, description="Maximum keyword score filter"),
+    min_ai_score: Optional[float] = Query(default=None, description="Minimum AI score filter (0-10)"),
     date_range: Optional[str] = Query(default=None, description="today/week/month/all"),
     page: int = Query(default=1, ge=1),
     per_page: int = Query(default=20, le=100),
@@ -44,7 +45,8 @@ async def get_articles(
     - **date_range**: Filter by date (today/week/month/all)
     - **page**: Page number
     - **per_page**: Items per page
-    - **sort_by**: Field to sort by (collected_at, score, published_at)
+    - **min_ai_score**: Minimum AI evaluation score (0-10)
+    - **sort_by**: Field to sort by (collected_at, score, ai_score, published_at)
     - **sort_order**: Sort order (asc, desc)
     """
     query = db.query(Article)
@@ -79,6 +81,8 @@ async def get_articles(
         query = query.filter(Article.score >= min_score)
     if max_score is not None:
         query = query.filter(Article.score <= max_score)
+    if min_ai_score is not None:
+        query = query.filter(Article.ai_score >= min_ai_score)
 
     # Date range filter
     if date_range:
@@ -123,13 +127,19 @@ async def get_top_articles(
     limit: int = Query(default=5, le=20),
     db: Session = Depends(get_db),
 ):
-    """Get top-scoring articles from recent collections."""
+    """Get top-scoring articles from recent collections (ai_score preferred)."""
+    from sqlalchemy import case
     cutoff = datetime.utcnow() - timedelta(days=7)
 
+    # ai_score 있는 기사 우선, 없으면 keyword score fallback
     articles = (
         db.query(Article)
         .filter(Article.collected_at >= cutoff)
-        .order_by(Article.score.desc())
+        .order_by(
+            case((Article.ai_score != None, 0), else_=1),
+            Article.ai_score.desc().nullslast(),
+            Article.score.desc(),
+        )
         .limit(limit)
         .all()
     )
@@ -232,6 +242,53 @@ async def mark_as_read(
         "id": article.id,
         "is_read": article.is_read,
         "read_at": article.read_at.isoformat() if article.read_at else None,
+    }
+
+
+@router.post("/batch-evaluate")
+async def batch_evaluate(
+    limit: int = Query(default=50, le=100),
+    force: bool = Query(default=False, description="Force re-evaluate all articles"),
+    db: Session = Depends(get_db),
+):
+    """Batch AI evaluation for articles using Claude Haiku."""
+    if not ANTHROPIC_API_KEY:
+        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not configured")
+
+    from web.services.evaluation_service import EvaluationService
+    service = EvaluationService(db)
+    result = service.batch_evaluate(limit=limit, force=force)
+
+    return {
+        **result,
+        "message": f"{result['processed']}개 기사 AI 평가 완료",
+    }
+
+
+@router.post("/{article_id}/evaluate")
+async def evaluate_article(
+    article_id: int,
+    db: Session = Depends(get_db),
+):
+    """Single article AI evaluation (force re-evaluate)."""
+    if not ANTHROPIC_API_KEY:
+        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not configured")
+
+    article = db.query(Article).filter(Article.id == article_id).first()
+    if not article:
+        raise HTTPException(status_code=404, detail="Article not found")
+
+    from web.services.evaluation_service import EvaluationService
+    service = EvaluationService(db)
+    result = service.evaluate_article(article, force=True)
+
+    if result is None:
+        raise HTTPException(status_code=500, detail="Evaluation failed")
+
+    return {
+        "ai_score": article.ai_score,
+        "linkedin_potential": article.linkedin_potential,
+        "eval_data": result,
     }
 
 

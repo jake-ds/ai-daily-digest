@@ -20,20 +20,19 @@ class ArticleEvaluation:
     article_title: str
     article_url: str
 
-    # 평가 점수 (0-10)
-    linkedin_potential: float      # 링크드인 engagement 잠재력
-    insight_depth: float           # 인사이트 깊이
-    industry_relevance: float      # AI/Tech 업계 관련성
-    tpm_vc_relevance: float        # TPM/VC 관점 관련성
-    timeliness: float              # 시의성/뉴스 가치
-    discussion_potential: float    # 토론/논쟁 유발 가능성
-    uniqueness: float              # 독특함/차별성
+    # 평가 점수 (0-10) — 7차원 통일
+    curiosity: float               # 클릭/관심 유발력
+    insight: float                 # 실질적 인사이트 깊이
+    relevance: float               # AI/Tech 업계 관련성
+    timeliness: float              # 시의성
+    discussion: float              # 토론 유발 가능성
+    shareability: float            # 공유 가치
+    depth: float                   # 맥락/시사점 해석 가능성
 
     # 종합
-    total_score: float             # 가중 평균 점수
-    recommended_angle: str         # 추천 포스팅 각도/관점
+    ai_score: float                # 가중 평균 종합 점수
+    linkedin_potential: float      # LinkedIn 특화 가중 평균
     key_insight: str               # 핵심 인사이트
-    target_audience: str           # 타겟 독자층
     hook_suggestion: str           # 오프닝 훅 제안
 
 
@@ -56,57 +55,96 @@ class ArticleEvaluator:
 
 ## 평가 기준 (각 0-10점)
 
-1. curiosity_hook: 제목만 봐도 "어? 이거 뭐지?" 하고 궁금해지는가?
+1. curiosity: 제목만 봐도 "어? 이거 뭐지?" 하고 궁금해지는가?
    - 높음: 클릭 안 하고는 못 배기는 주제
    - 낮음: "그렇구나" 하고 스크롤
 
-2. practical_value: 읽는 사람이 뭔가 얻어가는 게 있는가?
+2. insight: 읽는 사람이 뭔가 얻어가는 게 있는가?
    - 높음: 새로운 시각, 유용한 정보, 써먹을 수 있는 팁
    - 낮음: 그냥 뉴스 전달
 
-3. discussion_trigger: 사람들이 자기 의견을 말하고 싶어질 만한가?
-   - 높음: "나는 좀 다르게 생각하는데...", "이거 써봤는데..."
-   - 낮음: 동의/반대할 여지가 없는 팩트 나열
+3. relevance: AI/Tech 업계 종사자에게 관련 있는가?
+   - 높음: 업계 전반에 영향, 실무에 바로 적용 가능
+   - 낮음: 특수한 니치 주제
 
-4. explainability: 쉽게 풀어서 설명할 수 있는 주제인가?
-   - 높음: 비전문가도 이해할 수 있게 설명 가능
-   - 낮음: 배경지식 없이는 이해 불가
-
-5. freshness: 지금 이 타이밍에 공유해야 하는 이유가 있는가?
+4. timeliness: 지금 이 타이밍에 공유해야 하는 이유가 있는가?
    - 높음: 방금 나온 소식, 업계에서 화제인 주제
    - 낮음: 언제 올려도 상관없는 내용
+
+5. discussion: 사람들이 자기 의견을 말하고 싶어질 만한가?
+   - 높음: "나는 좀 다르게 생각하는데...", "이거 써봤는데..."
+   - 낮음: 동의/반대할 여지가 없는 팩트 나열
 
 6. shareability: 다른 사람에게 "이거 봤어?" 하고 공유하고 싶은가?
    - 높음: 동료한테 슬랙으로 보내고 싶음
    - 낮음: 혼자 읽고 끝
 
-7. depth_potential: 단순 요약을 넘어서 "왜 중요한지" 설명할 수 있는가?
+7. depth: 단순 요약을 넘어서 "왜 중요한지" 설명할 수 있는가?
    - 높음: 맥락과 시사점을 풀어낼 수 있음
    - 낮음: 있는 그대로 전달하는 게 전부
 
 ## 응답 형식 (JSON)
 ```json
 {{
-  "linkedin_potential": 7,
-  "insight_depth": 8,
-  "industry_relevance": 7,
-  "tpm_vc_relevance": 8,
+  "curiosity": 7,
+  "insight": 8,
+  "relevance": 7,
   "timeliness": 6,
-  "discussion_potential": 7,
-  "uniqueness": 6,
-  "recommended_angle": "이 기사를 어떤 질문이나 관점으로 시작하면 좋을지 (경험담 없이)",
+  "discussion": 7,
+  "shareability": 6,
+  "depth": 8,
   "key_insight": "뻔하지 않은, 이 기사만의 핵심 포인트 한 문장",
-  "target_audience": "이 글에 관심 가질 사람들 (구체적으로)",
   "hook_suggestion": "스크롤 멈추게 하는 첫 문장 (과장 없이, 호기심 유발)"
 }}
 ```
 
 JSON만 응답해주세요."""
 
+    # ai_score 가중치
+    AI_SCORE_WEIGHTS = {
+        "curiosity": 1.5,
+        "insight": 2.0,
+        "relevance": 1.5,
+        "timeliness": 1.0,
+        "discussion": 1.0,
+        "shareability": 1.0,
+        "depth": 1.5,
+    }
+
+    # linkedin_potential 가중치
+    LINKEDIN_WEIGHTS = {
+        "curiosity": 1.5,
+        "insight": 1.0,
+        "discussion": 2.0,
+        "shareability": 2.0,
+        "depth": 1.0,
+    }
+
     def __init__(self):
         self.client = None
         if Anthropic and os.getenv("ANTHROPIC_API_KEY"):
             self.client = Anthropic()
+
+    @staticmethod
+    def calculate_scores(data: dict) -> tuple:
+        """(ai_score, linkedin_potential) 가중 평균 계산"""
+        # ai_score: 전체 7차원 가중 평균
+        ai_weights = ArticleEvaluator.AI_SCORE_WEIGHTS
+        ai_total_weight = sum(ai_weights.values())
+        ai_score = sum(
+            data.get(key, 5) * weight
+            for key, weight in ai_weights.items()
+        ) / ai_total_weight
+
+        # linkedin_potential: LinkedIn engagement 특화 가중 평균
+        li_weights = ArticleEvaluator.LINKEDIN_WEIGHTS
+        li_total_weight = sum(li_weights.values())
+        linkedin_potential = sum(
+            data.get(key, 5) * weight
+            for key, weight in li_weights.items()
+        ) / li_total_weight
+
+        return round(ai_score, 1), round(linkedin_potential, 1)
 
     def evaluate_article(self, article: "Article") -> Optional[ArticleEvaluation]:
         """단일 기사 평가"""
@@ -122,7 +160,7 @@ JSON만 응답해주세요."""
 
         try:
             response = self.client.messages.create(
-                model="claude-3-5-haiku-20241022",
+                model="claude-haiku-4-5-20251001",
                 max_tokens=500,
                 messages=[{"role": "user", "content": prompt}]
             )
@@ -137,37 +175,21 @@ JSON만 응답해주세요."""
 
             data = json.loads(result_text.strip())
 
-            # 가중 평균 계산 (TPM/VC 관련성과 인사이트 깊이에 가중치)
-            weights = {
-                "linkedin_potential": 1.5,
-                "insight_depth": 2.0,
-                "industry_relevance": 1.0,
-                "tpm_vc_relevance": 2.0,
-                "timeliness": 1.0,
-                "discussion_potential": 1.5,
-                "uniqueness": 1.0
-            }
-
-            total_weight = sum(weights.values())
-            total_score = sum(
-                data.get(key, 5) * weight
-                for key, weight in weights.items()
-            ) / total_weight
+            ai_score, linkedin_potential = self.calculate_scores(data)
 
             return ArticleEvaluation(
                 article_title=article.title,
                 article_url=article.url,
-                linkedin_potential=data.get("linkedin_potential", 5),
-                insight_depth=data.get("insight_depth", 5),
-                industry_relevance=data.get("industry_relevance", 5),
-                tpm_vc_relevance=data.get("tpm_vc_relevance", 5),
+                curiosity=data.get("curiosity", 5),
+                insight=data.get("insight", 5),
+                relevance=data.get("relevance", 5),
                 timeliness=data.get("timeliness", 5),
-                discussion_potential=data.get("discussion_potential", 5),
-                uniqueness=data.get("uniqueness", 5),
-                total_score=round(total_score, 2),
-                recommended_angle=data.get("recommended_angle", ""),
+                discussion=data.get("discussion", 5),
+                shareability=data.get("shareability", 5),
+                depth=data.get("depth", 5),
+                ai_score=ai_score,
+                linkedin_potential=linkedin_potential,
                 key_insight=data.get("key_insight", ""),
-                target_audience=data.get("target_audience", ""),
                 hook_suggestion=data.get("hook_suggestion", "")
             )
 
@@ -190,7 +212,7 @@ JSON만 응답해주세요."""
                 print(f"평가 진행 중: {i + 1}/{len(articles)}")
 
         # 총점 기준 내림차순 정렬
-        evaluations.sort(key=lambda x: x.total_score, reverse=True)
+        evaluations.sort(key=lambda x: x.ai_score, reverse=True)
 
         print(f"평가 완료: {len(evaluations)}개 기사")
 
@@ -265,7 +287,7 @@ JSON만 응답해주세요."""
                 remaining_slots -= 1
 
         # 점수 순 정렬
-        candidates.sort(key=lambda x: x[1].total_score, reverse=True)
+        candidates.sort(key=lambda x: x[1].ai_score, reverse=True)
 
         return candidates
 
@@ -276,13 +298,13 @@ JSON만 응답해주세요."""
         print("=" * 60)
 
         for i, eval in enumerate(evaluations[:top_n], 1):
-            print(f"\n🏆 #{i} (점수: {eval.total_score}/10)")
+            print(f"\n🏆 #{i} (AI: {eval.ai_score}/10, LI: {eval.linkedin_potential}/10)")
             print(f"제목: {eval.article_title[:60]}...")
-            print(f"├─ 링크드인 잠재력: {eval.linkedin_potential}/10")
-            print(f"├─ 인사이트 깊이: {eval.insight_depth}/10")
-            print(f"├─ TPM/VC 관련성: {eval.tpm_vc_relevance}/10")
-            print(f"├─ 토론 잠재력: {eval.discussion_potential}/10")
-            print(f"├─ 추천 각도: {eval.recommended_angle[:50]}...")
+            print(f"├─ 호기심: {eval.curiosity}/10")
+            print(f"├─ 인사이트: {eval.insight}/10")
+            print(f"├─ 관련성: {eval.relevance}/10")
+            print(f"├─ 토론유발: {eval.discussion}/10")
+            print(f"├─ 공유가치: {eval.shareability}/10")
             print(f"└─ 핵심 인사이트: {eval.key_insight[:50]}...")
 
         print("\n" + "=" * 60)

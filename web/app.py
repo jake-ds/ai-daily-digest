@@ -68,13 +68,17 @@ async def dashboard(request: Request, db: Session = Depends(get_db)):
     # Get recent collections
     recent_collections = service.get_recent_collections(limit=5)
 
-    # Get top articles
-    from datetime import timedelta
+    # Get top articles (ai_score 우선, fallback keyword score)
+    from sqlalchemy import case
     cutoff = datetime.utcnow() - timedelta(days=7)
     top_articles = (
         db.query(Article)
         .filter(Article.collected_at >= cutoff)
-        .order_by(Article.score.desc())
+        .order_by(
+            case((Article.ai_score != None, 0), else_=1),
+            Article.ai_score.desc().nullslast(),
+            Article.score.desc(),
+        )
         .limit(5)
         .all()
     )
@@ -97,6 +101,7 @@ async def articles_list(
     category: Optional[str] = None,
     date_range: Optional[str] = "today",
     min_score: Optional[float] = None,
+    min_ai_score: Optional[float] = None,
     favorite: Optional[str] = None,
     unread: Optional[str] = None,
     page: int = 1,
@@ -138,7 +143,9 @@ async def articles_list(
             query = query.filter(Article.collected_at >= cutoff)
 
     # Score filter
-    if min_score:
+    if min_ai_score:
+        query = query.filter(Article.ai_score >= min_ai_score)
+    elif min_score:
         query = query.filter(Article.score >= min_score)
 
     # Favorite filter
@@ -150,8 +157,13 @@ async def articles_list(
         query = query.filter(Article.is_read == False)
 
     total = query.count()
+    from sqlalchemy import case as sql_case
     articles = (
-        query.order_by(Article.score.desc())
+        query.order_by(
+            sql_case((Article.ai_score != None, 0), else_=1),
+            Article.ai_score.desc().nullslast(),
+            Article.score.desc(),
+        )
         .offset((page - 1) * per_page)
         .limit(per_page)
         .all()
@@ -171,6 +183,13 @@ async def articles_list(
         .count()
     )
 
+    # Count articles without AI evaluation
+    unevaluated_count = (
+        db.query(Article)
+        .filter(Article.ai_score == None)
+        .count()
+    )
+
     return templates.TemplateResponse(
         "articles/list.html",
         {
@@ -178,10 +197,12 @@ async def articles_list(
             "articles": articles,
             "categories": categories,
             "unsummarized_count": unsummarized_count,
+            "unevaluated_count": unevaluated_count,
             "current_category": category,
             "search_query": q,
             "date_range": date_range,
             "min_score": min_score,
+            "min_ai_score": min_ai_score,
             "show_favorite": favorite == "1",
             "show_unread": unread == "1",
             "page": page,
