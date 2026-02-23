@@ -1,0 +1,418 @@
+{% extends "base.html" %}
+
+{% block title %}Inspiration #{{ post.id }} - AI Daily Digest{% endblock %}
+
+{% block head %}
+<style>
+    .analysis-section {
+        transition: all 0.2s;
+    }
+    .suggestion-card {
+        transition: all 0.2s;
+    }
+    .suggestion-card:hover {
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex justify-between items-center">
+        <a href="/inspiration" class="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+            </svg>
+            Back to list
+        </a>
+        <div class="flex gap-2">
+            <button onclick="reanalyze()" id="reanalyze-btn"
+                    class="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
+                Reanalyze
+            </button>
+            <button onclick="learnFromPost()" id="learn-btn"
+                    class="px-3 py-1.5 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700">
+                Learn
+            </button>
+            <button onclick="confirmDelete()" class="px-3 py-1.5 text-sm bg-red-100 text-red-600 rounded-lg hover:bg-red-200">
+                Delete
+            </button>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Main Content -->
+        <div class="lg:col-span-2 space-y-6">
+            <!-- Post Content -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold text-gray-900 mb-4">Content</h2>
+                <div class="prose max-w-none text-gray-700 text-sm leading-relaxed whitespace-pre-wrap">{{ post.content }}</div>
+            </div>
+
+            <!-- AI Analysis -->
+            {% if analysis %}
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold text-gray-900 mb-4">AI Analysis</h2>
+                <div id="analysis-display" class="space-y-3">
+                    {% if analysis.hook %}
+                    <div class="analysis-section p-3 bg-blue-50 rounded-lg">
+                        <div class="text-sm font-medium text-blue-900 mb-1">Hook: {{ analysis.hook.type or '' }}</div>
+                        <p class="text-sm text-blue-700">"{{ analysis.hook.text or '' }}"</p>
+                        {% if analysis.hook.effectiveness %}
+                        <p class="text-xs text-blue-600 mt-1">{{ analysis.hook.effectiveness }}</p>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+
+                    {% if analysis.structure %}
+                    <div class="analysis-section p-3 bg-green-50 rounded-lg">
+                        <div class="text-sm font-medium text-green-900 mb-1">Structure: {{ analysis.structure.pattern or '' }}</div>
+                        {% if analysis.structure.flow %}
+                        <p class="text-xs text-green-600">{{ analysis.structure.flow }}</p>
+                        {% endif %}
+                        {% if analysis.structure.sections %}
+                        <ul class="list-disc pl-4 mt-1 text-xs text-green-700">
+                            {% for section in analysis.structure.sections %}
+                            <li>{{ section }}</li>
+                            {% endfor %}
+                        </ul>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+
+                    {% if analysis.tone %}
+                    <div class="analysis-section p-3 bg-purple-50 rounded-lg">
+                        <div class="text-sm font-medium text-purple-900">Tone</div>
+                        <p class="text-sm text-purple-700">{{ analysis.tone.formality or '' }} | Persona: {{ analysis.tone.persona or '' }}</p>
+                    </div>
+                    {% endif %}
+
+                    {% if analysis.techniques %}
+                    <div class="analysis-section p-3 bg-indigo-50 rounded-lg">
+                        <div class="text-sm font-medium text-indigo-900 mb-1">Techniques</div>
+                        <ul class="list-disc pl-4 text-sm text-indigo-700">
+                            {% for tech in analysis.techniques %}
+                            <li>{{ tech }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+
+                    {% if analysis.closing %}
+                    <div class="analysis-section p-3 bg-gray-50 rounded-lg">
+                        <div class="text-sm font-medium text-gray-900 mb-1">Closing: {{ analysis.closing.type or '' }}</div>
+                        {% if analysis.closing.text %}
+                        <p class="text-sm text-gray-700">"{{ analysis.closing.text }}"</p>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+
+                    {% if analysis.strengths %}
+                    <div class="analysis-section p-3 bg-yellow-50 rounded-lg">
+                        <div class="text-sm font-medium text-yellow-900 mb-1">Strengths</div>
+                        <ul class="list-disc pl-4 text-sm text-yellow-700">
+                            {% for s in analysis.strengths %}
+                            <li>{{ s }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+
+                    {% if analysis.patterns_to_learn %}
+                    <div class="analysis-section p-3 bg-orange-50 rounded-lg">
+                        <div class="text-sm font-medium text-orange-900 mb-1">Patterns to Learn</div>
+                        <ul class="list-disc pl-4 text-sm text-orange-700">
+                            {% for p in analysis.patterns_to_learn %}
+                            <li>{{ p }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+
+                    {% if analysis.metrics %}
+                    <div class="analysis-section p-3 bg-gray-50 rounded-lg">
+                        <div class="text-sm font-medium text-gray-900 mb-1">Metrics</div>
+                        <div class="flex gap-4 text-sm text-gray-600">
+                            {% if analysis.metrics.length %}<span>Length: {{ analysis.metrics.length }}</span>{% endif %}
+                            {% if analysis.metrics.paragraph_count %}<span>Paragraphs: {{ analysis.metrics.paragraph_count }}</span>{% endif %}
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% if analysis.overall_assessment %}
+                    <div class="analysis-section p-3 bg-gray-100 rounded-lg">
+                        <div class="text-sm font-medium text-gray-900 mb-1">Overall</div>
+                        <p class="text-sm text-gray-700">{{ analysis.overall_assessment }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% else %}
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold text-gray-900 mb-4">AI Analysis</h2>
+                <p class="text-sm text-gray-500">No analysis yet. Click "Reanalyze" to generate.</p>
+            </div>
+            {% endif %}
+
+            <!-- Learning Suggestions (shown after Learn action) -->
+            <div id="suggestions-panel" class="hidden">
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h2 class="text-lg font-semibold text-gray-900 mb-4">Guidelines Update Suggestions</h2>
+                    <div id="suggestions-content" class="space-y-3"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="space-y-4">
+            <!-- Metadata -->
+            <div class="bg-white rounded-lg shadow p-4">
+                <h3 class="font-semibold text-gray-900 mb-3">Metadata</h3>
+                <dl class="space-y-3 text-sm">
+                    <div>
+                        <dt class="text-gray-500">Author</dt>
+                        <dd class="text-gray-900 font-medium">{{ post.author or 'Unknown' }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-gray-500">Scenario</dt>
+                        <dd>
+                            <select id="meta-scenario" onchange="updateMeta()"
+                                    class="border rounded px-2 py-1 text-sm w-full">
+                                <option value="" {{ 'selected' if not post.scenario }}>None</option>
+                                {% for key, scenario in scenarios.items() %}
+                                <option value="{{ key }}" {{ 'selected' if post.scenario == key }}>{{ key }}: {{ scenario.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-gray-500 mb-1">Tags</dt>
+                        <dd>
+                            <div id="tags-display" class="flex flex-wrap gap-1 mb-2">
+                                {% for tag in tags %}
+                                <span class="px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded-full">#{{ tag }}</span>
+                                {% endfor %}
+                            </div>
+                            <div class="flex gap-1">
+                                <input type="text" id="meta-tags" class="flex-1 border rounded px-2 py-1 text-xs"
+                                       placeholder="tag1, tag2..."
+                                       value="{{ tags | join(', ') }}">
+                                <button onclick="updateTags()" class="px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200">Save</button>
+                            </div>
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-gray-500">Date</dt>
+                        <dd class="text-gray-900">{{ post.created_at.strftime('%Y-%m-%d %H:%M') if post.created_at else 'N/A' }}</dd>
+                    </div>
+                    {% if post.source_url %}
+                    <div>
+                        <dt class="text-gray-500">URL</dt>
+                        <dd><a href="{{ post.source_url }}" target="_blank" class="text-blue-600 hover:text-blue-800 text-xs break-all">{{ post.source_url[:60] }}...</a></dd>
+                    </div>
+                    {% endif %}
+                </dl>
+            </div>
+
+            <!-- Quick Stats -->
+            <div class="bg-white rounded-lg shadow p-4">
+                <h3 class="font-semibold text-gray-900 mb-3">Quick Stats</h3>
+                <div class="space-y-2 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Characters</span>
+                        <span class="font-medium">{{ post.content | length }}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Paragraphs</span>
+                        <span class="font-medium">{{ post.content.split('\n\n') | length }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const POST_ID = {{ post.id }};
+
+// Reanalyze
+async function reanalyze() {
+    const btn = document.getElementById('reanalyze-btn');
+    btn.disabled = true;
+    btn.textContent = 'Analyzing...';
+
+    try {
+        const resp = await fetch(`/api/inspiration/posts/${POST_ID}/reanalyze`, { method: 'POST' });
+        if (!resp.ok) throw new Error('Failed');
+
+        showToast('Analysis updated. Reloading...', 'success');
+        setTimeout(() => location.reload(), 500);
+    } catch (e) {
+        showToast('Reanalysis failed', 'error');
+    }
+
+    btn.disabled = false;
+    btn.textContent = 'Reanalyze';
+}
+
+// Learn from post
+async function learnFromPost() {
+    const btn = document.getElementById('learn-btn');
+    btn.disabled = true;
+    btn.textContent = 'Learning...';
+
+    try {
+        const resp = await fetch(`/api/inspiration/posts/${POST_ID}/learn`, { method: 'POST' });
+        if (!resp.ok) throw new Error('Failed');
+
+        const data = await resp.json();
+        showSuggestions(data.suggestions);
+        showToast('Suggestions generated', 'success');
+    } catch (e) {
+        showToast('Learning failed', 'error');
+    }
+
+    btn.disabled = false;
+    btn.textContent = 'Learn';
+}
+
+function showSuggestions(suggestions) {
+    const panel = document.getElementById('suggestions-panel');
+    const container = document.getElementById('suggestions-content');
+    panel.classList.remove('hidden');
+
+    if (suggestions.error) {
+        container.innerHTML = `<p class="text-sm text-red-500">${suggestions.error}</p>`;
+        return;
+    }
+
+    if (!suggestions.suggestions || suggestions.suggestions.length === 0) {
+        container.innerHTML = '<p class="text-sm text-gray-500">No new suggestions.</p>';
+        return;
+    }
+
+    let html = '';
+    if (suggestions.summary) {
+        html += `<p class="text-sm text-gray-600 mb-3">${suggestions.summary}</p>`;
+    }
+
+    window._suggestions = suggestions.suggestions;
+
+    suggestions.suggestions.forEach((s, i) => {
+        html += `<div class="suggestion-card p-4 border rounded-lg" id="suggestion-${i}">
+            <div class="flex items-start justify-between">
+                <div class="flex-1">
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="px-2 py-0.5 text-xs font-medium rounded ${s.type === 'add' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}">
+                            ${s.type === 'add' ? 'Add' : 'Modify'}
+                        </span>
+                        <span class="text-sm font-medium text-gray-900">${s.section || ''}</span>
+                    </div>
+                    <p class="text-sm text-gray-700 mt-1">${s.content || ''}</p>
+                    <p class="text-xs text-gray-500 mt-1">${s.reason || ''}</p>
+                </div>
+                <div class="flex gap-1 ml-3">
+                    <button onclick="applySuggestion(${i})" id="apply-btn-${i}"
+                            class="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700">Accept</button>
+                    <button onclick="dismissSuggestion(${i})"
+                            class="px-3 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300">Reject</button>
+                </div>
+            </div>
+        </div>`;
+    });
+
+    container.innerHTML = html;
+}
+
+async function applySuggestion(index) {
+    const suggestion = window._suggestions?.[index];
+    if (!suggestion) return;
+
+    const btn = document.getElementById(`apply-btn-${index}`);
+    btn.disabled = true;
+    btn.textContent = 'Applying...';
+
+    try {
+        const resp = await fetch('/api/settings/guidelines/apply-suggestion', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ suggestion })
+        });
+        if (!resp.ok) throw new Error('Failed');
+
+        const card = document.getElementById(`suggestion-${index}`);
+        card.classList.add('opacity-50');
+        btn.textContent = 'Applied';
+        btn.className = 'px-3 py-1 text-xs bg-gray-300 text-gray-500 rounded cursor-not-allowed';
+        showToast('Guideline updated', 'success');
+    } catch (e) {
+        btn.disabled = false;
+        btn.textContent = 'Accept';
+        showToast('Apply failed', 'error');
+    }
+}
+
+function dismissSuggestion(index) {
+    const card = document.getElementById(`suggestion-${index}`);
+    if (card) {
+        card.classList.add('opacity-30');
+    }
+}
+
+// Update metadata
+async function updateMeta() {
+    const scenario = document.getElementById('meta-scenario').value || null;
+    try {
+        await fetch(`/api/inspiration/posts/${POST_ID}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ scenario })
+        });
+        showToast('Scenario updated', 'success');
+    } catch (e) {
+        showToast('Update failed', 'error');
+    }
+}
+
+async function updateTags() {
+    const raw = document.getElementById('meta-tags').value.trim();
+    const tags = raw ? raw.split(',').map(t => t.trim()).filter(Boolean) : [];
+
+    try {
+        await fetch(`/api/inspiration/posts/${POST_ID}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tags })
+        });
+
+        // Update display
+        const display = document.getElementById('tags-display');
+        display.innerHTML = tags.map(t => `<span class="px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded-full">#${t}</span>`).join('');
+
+        showToast('Tags updated', 'success');
+    } catch (e) {
+        showToast('Update failed', 'error');
+    }
+}
+
+// Delete
+async function confirmDelete() {
+    if (!confirm('Delete this reference post?')) return;
+
+    try {
+        const resp = await fetch(`/api/inspiration/posts/${POST_ID}`, { method: 'DELETE' });
+        if (resp.ok) {
+            showToast('Deleted', 'success');
+            window.location.href = '/inspiration';
+        } else {
+            showToast('Delete failed', 'error');
+        }
+    } catch (e) {
+        showToast('Delete failed', 'error');
+    }
+}
+</script>
+{% endblock %}

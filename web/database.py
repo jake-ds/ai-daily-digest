@@ -25,7 +25,7 @@ Base = declarative_base()
 
 def init_db():
     """Initialize database tables."""
-    from web.models import article, collection, linkedin_draft, reference_post  # noqa: F401
+    from web.models import article, collection, linkedin_draft, reference_post, style_profile  # noqa: F401
     Base.metadata.create_all(bind=engine)
     migrate_db()
 
@@ -86,6 +86,7 @@ def migrate_db():
         existing_ref = {col["name"] for col in inspector.get_columns("reference_posts")}
         ref_columns = {
             "scenario": "VARCHAR(10)",
+            "tags": "TEXT",
         }
         with engine.begin() as conn:
             for col_name, col_type in ref_columns.items():

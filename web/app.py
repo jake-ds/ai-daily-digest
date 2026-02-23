@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from web.database import init_db, get_db
-from web.api import digest_router, articles_router, linkedin_router, settings_router
+from web.api import digest_router, articles_router, linkedin_router, settings_router, inspiration_router
 from web.models import Article, Collection, LinkedInDraft, Schedule
 from web.services.digest_service import DigestService
 from web.services.linkedin_service import SCENARIOS
@@ -54,6 +54,7 @@ app.include_router(digest_router)
 app.include_router(articles_router)
 app.include_router(linkedin_router)
 app.include_router(settings_router)
+app.include_router(inspiration_router)
 
 
 # Web pages
@@ -327,6 +328,137 @@ async def draft_partial(
     return templates.TemplateResponse(
         "partials/draft_card.html",
         {"request": request, "draft": draft, "scenarios": SCENARIOS},
+    )
+
+
+# Inspiration pages
+@app.get("/inspiration", response_class=HTMLResponse)
+async def inspiration_page(
+    request: Request,
+    scenario: Optional[str] = None,
+    tag: Optional[str] = None,
+    q: Optional[str] = None,
+    page: int = 1,
+    db: Session = Depends(get_db),
+):
+    """Inspiration library page."""
+    import json as _json
+    from web.models import ReferencePost
+
+    per_page = 18
+    query = db.query(ReferencePost)
+
+    if scenario:
+        query = query.filter(ReferencePost.scenario == scenario)
+    if tag:
+        query = query.filter(ReferencePost.tags.like(f'%"{tag}"%'))
+    if q:
+        search_pattern = f"%{q}%"
+        query = query.filter(
+            ReferencePost.content.ilike(search_pattern)
+            | ReferencePost.author.ilike(search_pattern)
+        )
+
+    total = query.count()
+    posts = (
+        query.order_by(ReferencePost.created_at.desc())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+        .all()
+    )
+
+    # Parse tags for display
+    for post in posts:
+        try:
+            post.tags_list = _json.loads(post.tags) if post.tags else []
+        except _json.JSONDecodeError:
+            post.tags_list = []
+        # Extract score from analysis if available
+        post.analysis_score = None
+        if post.analysis:
+            try:
+                a = _json.loads(post.analysis)
+                if a.get("metrics", {}).get("length"):
+                    post.analysis_score = a["metrics"]["length"]
+            except _json.JSONDecodeError:
+                pass
+
+    # Get all tags for filter bar
+    all_posts_with_tags = db.query(ReferencePost).filter(ReferencePost.tags != None).all()
+    tag_counts: dict[str, int] = {}
+    for p in all_posts_with_tags:
+        try:
+            tags = _json.loads(p.tags) if p.tags else []
+            for t in tags:
+                tag_counts[t] = tag_counts.get(t, 0) + 1
+        except _json.JSONDecodeError:
+            continue
+    all_tags = sorted(
+        [{"name": name, "count": count} for name, count in tag_counts.items()],
+        key=lambda x: x["count"], reverse=True,
+    )
+
+    return templates.TemplateResponse(
+        "inspiration/list.html",
+        {
+            "request": request,
+            "posts": posts,
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "total_pages": (total + per_page - 1) // per_page if total > 0 else 1,
+            "current_scenario": scenario,
+            "current_tag": tag,
+            "search_query": q,
+            "all_tags": all_tags,
+            "scenarios": SCENARIOS,
+        },
+    )
+
+
+@app.get("/inspiration/{post_id}", response_class=HTMLResponse)
+async def inspiration_detail(
+    request: Request,
+    post_id: int,
+    db: Session = Depends(get_db),
+):
+    """Inspiration post detail page."""
+    import json as _json
+    from web.models import ReferencePost
+
+    post = db.query(ReferencePost).filter(ReferencePost.id == post_id).first()
+    if not post:
+        return templates.TemplateResponse(
+            "404.html",
+            {"request": request, "message": "Reference post not found"},
+            status_code=404,
+        )
+
+    # Parse analysis
+    analysis = None
+    if post.analysis:
+        try:
+            analysis = _json.loads(post.analysis)
+        except _json.JSONDecodeError:
+            pass
+
+    # Parse tags
+    tags = []
+    if post.tags:
+        try:
+            tags = _json.loads(post.tags)
+        except _json.JSONDecodeError:
+            pass
+
+    return templates.TemplateResponse(
+        "inspiration/detail.html",
+        {
+            "request": request,
+            "post": post,
+            "analysis": analysis,
+            "tags": tags,
+            "scenarios": SCENARIOS,
+        },
     )
 
 

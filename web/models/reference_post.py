@@ -1,5 +1,6 @@
 """Reference post model for storing LinkedIn post examples for guideline learning."""
 
+import json
 from datetime import datetime
 from sqlalchemy import Column, Integer, String, DateTime, Text
 
@@ -17,6 +18,7 @@ class ReferencePost(Base):
     source_url = Column(Text, nullable=True)        # 원본 URL
     analysis = Column(Text, nullable=True)          # AI 분석 결과 JSON
     scenario = Column(String(10), nullable=True)    # 시나리오 (A-F)
+    tags = Column(Text, nullable=True)              # JSON array: ["writing", "hook", "storytelling"]
     created_at = Column(DateTime, default=datetime.utcnow)
 
     def __repr__(self):
@@ -31,5 +33,6 @@ class ReferencePost(Base):
             "source_url": self.source_url,
             "analysis": self.analysis,
             "scenario": self.scenario,
+            "tags": json.loads(self.tags) if self.tags else [],
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
