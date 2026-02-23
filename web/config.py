@@ -32,3 +32,7 @@ DEFAULT_ARTICLE_LIMIT = 50
 
 # LinkedIn settings
 LINKEDIN_GUIDELINES_PATH = DATA_DIR / "linkedin_guidelines.md"
+
+# Google Custom Search (LinkedIn 리서치용)
+GOOGLE_CSE_API_KEY = os.getenv("GOOGLE_CSE_API_KEY")
+GOOGLE_CSE_ENGINE_ID = os.getenv("GOOGLE_CSE_ENGINE_ID")

@@ -17,8 +17,9 @@ router = APIRouter(prefix="/api/linkedin", tags=["linkedin"])
 # --- Pydantic models ---
 
 class AgentInputData(BaseModel):
-    direction: Optional[str] = None
-    feedback: Optional[str] = None
+    direction: Optional[str] = None      # 하위 호환
+    feedback: Optional[str] = None       # outline_feedback, draft_feedback
+    hook_index: Optional[int] = None     # hook 선택 (0-based index)
 
 
 class ChatMessage(BaseModel):
@@ -196,6 +197,7 @@ async def agent_start(
     article_id: int,
     scenario: Optional[str] = Query(default=None, regex="^[A-F]$"),
     hook: Optional[str] = Query(default=None),
+    instructions: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
 ):
     """Start an agent session for article. Returns SSE stream."""
@@ -208,7 +210,7 @@ async def agent_start(
     agent = LinkedInAgent(db)
 
     async def event_generator():
-        async for event in agent.run(article_id, scenario, hook=hook):
+        async for event in agent.run(article_id, scenario, hook=hook, instructions=instructions):
             yield event
 
     return StreamingResponse(

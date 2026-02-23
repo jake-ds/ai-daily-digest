@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from web.models import Article, LinkedInDraft, ReferencePost
 from web.config import ANTHROPIC_API_KEY, LINKEDIN_GUIDELINES_PATH
 from web.services.source_fetcher import fetch as fetch_source_content
+from web.services.web_researcher import research_article
 
 # Writing-critical steps use Opus for quality; classification/evaluation use Haiku/Sonnet
 MODEL_WRITING = "claude-opus-4-20250514"
@@ -87,6 +88,8 @@ class LinkedInService:
 
     # 시나리오 감지 결과 캐시 (article_id -> {scenario, confidence, reason})
     _scenario_cache: dict = {}
+    # 리서치 결과 캐시 (article_id -> research_text)
+    _research_cache: dict = {}
 
     def detect_scenario(self, article: Article) -> str:
         """Detect the best scenario for an article (returns scenario letter only)."""
@@ -218,6 +221,27 @@ class LinkedInService:
             "news": "A",
         }
         return category_map.get(article.category, "A")
+
+    def _research_topic(self, article: Article) -> str:
+        """Research the article topic using Google Custom Search.
+
+        Returns research context string, or empty string if unavailable.
+        Results are cached per article_id.
+        """
+        if article.id in self._research_cache:
+            return self._research_cache[article.id]
+
+        try:
+            result = research_article(
+                title=article.title,
+                summary=article.ai_summary or article.summary or "",
+            )
+            research_text = result or ""
+        except Exception:
+            research_text = ""
+
+        self._research_cache[article.id] = research_text
+        return research_text
 
     # 금지어 목록
     FORBIDDEN_WORDS = [
@@ -458,6 +482,7 @@ class LinkedInService:
         article: Article,
         scenario: Optional[str] = None,
         count: int = 5,
+        instructions: Optional[str] = None,
     ) -> List[dict]:
         """Generate multiple hook options before full draft.
 
@@ -465,6 +490,7 @@ class LinkedInService:
             article: Article to generate hooks for
             scenario: Scenario (A-F), auto-detected if not provided
             count: Number of hooks to generate (default 5)
+            instructions: Additional user instructions (optional)
 
         Returns:
             list[dict] — 각 {hook: str, style: str, reasoning: str}
@@ -479,7 +505,13 @@ class LinkedInService:
 
         # Fetch source content for deeper hooks
         source_content = self._fetch_source_content(article.url)
-        article_context = self._build_article_context(article, source_content=source_content)
+
+        # Run research
+        research_context = self._research_topic(article)
+
+        article_context = self._build_article_context(
+            article, source_content=source_content, research_context=research_context,
+        )
 
         # 시나리오별 지침서 추출
         hook_guidelines = ""
@@ -494,6 +526,14 @@ class LinkedInService:
         if not persona:
             persona = "- VC 심사역 + ML 엔지니어 출신 AI 빌더\n- 최신 AI 기술과 시장 동향에 깊은 이해"
 
+        # 추가 지시 섹션
+        instructions_section = ""
+        if instructions and instructions.strip():
+            instructions_section = f"""
+## 추가 지시 (반드시 반영)
+{instructions.strip()}
+"""
+
         prompt = f"""당신은 LinkedIn 포스팅 전문가입니다. 다음 기사에 대해 LinkedIn 포스트의 훅(첫 1-3줄)을 {count}개 생성해주세요.
 
 ## 페르소나
@@ -504,7 +544,7 @@ class LinkedInService:
 - 설명: {scenario_info['description']}
 
 {article_context}
-{hook_guidelines}
+{hook_guidelines}{instructions_section}
 ## 훅 작성 규칙
 - 각 훅은 1-3줄 (최대 210자 이내 — LinkedIn '더보기' 접힘점 기준)
 - {count}개의 훅은 각각 다른 접근법/스타일이어야 함
@@ -565,6 +605,7 @@ JSON만 출력하세요. 다른 설명은 불필요합니다."""
         article: Article,
         scenario: Optional[str] = None,
         hook: Optional[str] = None,
+        instructions: Optional[str] = None,
     ) -> LinkedInDraft:
         """
         Generate a LinkedIn draft for an article.
@@ -573,6 +614,7 @@ JSON만 출력하세요. 다른 설명은 불필요합니다."""
             article: Article to generate draft for
             scenario: Scenario (A-F), auto-detected if not provided
             hook: Pre-selected hook text to use as opening
+            instructions: Additional user instructions (optional)
 
         Returns:
             LinkedInDraft record
@@ -588,8 +630,15 @@ JSON만 출력하세요. 다른 설명은 불필요합니다."""
         # Fetch source content for deep reading
         source_content = self._fetch_source_content(article.url)
 
+        # Run research
+        research_context = self._research_topic(article)
+
         # Build the prompt
-        prompt = self._build_prompt(article, scenario, scenario_info, hook=hook, source_content=source_content)
+        prompt = self._build_prompt(
+            article, scenario, scenario_info,
+            hook=hook, source_content=source_content,
+            research_context=research_context, instructions=instructions,
+        )
 
         # Generate with Claude (Opus for writing quality)
         response = self.client.messages.create(
@@ -733,8 +782,8 @@ JSON만 출력하세요. 다른 설명은 불필요합니다."""
         except Exception:
             return ""
 
-    def _build_article_context(self, article: Article, source_content: str = "") -> str:
-        """Build enriched article context with metadata and optional source content."""
+    def _build_article_context(self, article: Article, source_content: str = "", research_context: str = "") -> str:
+        """Build enriched article context with metadata, source content, and research."""
         lines = [
             f"## 기사 정보",
             f"- 제목: {article.title}",
@@ -772,12 +821,20 @@ JSON만 출력하세요. 다른 설명은 불필요합니다."""
 
 {source_content}"""
 
+        # Append research context if available
+        if research_context:
+            result += f"""
+
+{research_context}
+
+위 리서치 결과에서 신뢰도 있는 수치, 인용구, 업계 맥락, 경쟁사 비교 데이터를 활용하여 포스트의 깊이를 높이세요."""
+
         return result
 
-    def _build_prompt(self, article: Article, scenario: str, scenario_info: dict, hook: Optional[str] = None, source_content: str = "") -> str:
+    def _build_prompt(self, article: Article, scenario: str, scenario_info: dict, hook: Optional[str] = None, source_content: str = "", research_context: str = "", instructions: Optional[str] = None) -> str:
         """Build the generation prompt with Jake's guidelines."""
         # 기사 정보 섹션 (풍부한 맥락 포함)
-        article_section = self._build_article_context(article, source_content=source_content)
+        article_section = self._build_article_context(article, source_content=source_content, research_context=research_context)
 
         # 시나리오 필터링된 지침서 (전문 대신 해당 시나리오 규칙만)
         scenario_guidelines = self._extract_scenario_guidelines(scenario)
@@ -841,6 +898,14 @@ JSON만 출력하세요. 다른 설명은 불필요합니다."""
 {past_learnings}
 """
 
+        # 추가 지시 섹션
+        instructions_section = ""
+        if instructions and instructions.strip():
+            instructions_section = f"""## 추가 지시 (반드시 반영)
+{instructions.strip()}
+
+"""
+
         return f"""당신은 LinkedIn 포스팅 전문가입니다. 다음 기사를 바탕으로 LinkedIn 포스트를 작성해주세요.
 
 {persona_section}
@@ -855,7 +920,7 @@ JSON만 출력하세요. 다른 설명은 불필요합니다."""
 
 {rules_section}
 {self._get_reference_examples(scenario)}
-{hook_section}{learnings_section}## LinkedIn 포맷팅 규칙
+{hook_section}{learnings_section}{instructions_section}## LinkedIn 포맷팅 규칙
 - 줄바꿈으로 단락을 명확히 구분하세요
 - 짧은 문장을 사용하세요 (한 문장에 2줄 이상 금지)
 - 넘버링(1, 2, 3)을 활용하여 가독성을 높이세요
