@@ -17,6 +17,11 @@ from web.models import Article, LinkedInDraft, ReferencePost
 from web.config import ANTHROPIC_API_KEY, LINKEDIN_GUIDELINES_PATH
 from web.services.source_fetcher import fetch as fetch_source_content
 
+# Writing-critical steps use Opus for quality; classification/evaluation use Haiku/Sonnet
+MODEL_WRITING = "claude-opus-4-20250514"
+MODEL_SUPPORT = "claude-sonnet-4-20250514"
+MODEL_CLASSIFY = "claude-haiku-4-5-20251001"
+
 
 # Jake's LinkedIn Post Scenarios
 SCENARIOS = {
@@ -132,7 +137,7 @@ class LinkedInService:
 {{"scenario": "A", "confidence": 0.85, "reason": "1순위 시나리오 적합 이유", "alternative": {{"scenario": "D", "confidence": 0.6, "reason": "2순위 시나리오 적합 이유"}}}}"""
 
         response = self.client.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model=MODEL_CLASSIFY,
             max_tokens=300,
             messages=[{"role": "user", "content": prompt}],
         )
@@ -431,7 +436,7 @@ class LinkedInService:
 {{"overall_score": 85, "items": [{{"category": "문체", "rule": "하십시오체", "pass": true, "comment": "적절"}}], "summary": "한 줄 요약"}}"""
 
             response = self.client.messages.create(
-                model="claude-haiku-4-5-20251001",
+                model=MODEL_CLASSIFY,
                 max_tokens=1000,
                 messages=[{"role": "user", "content": prompt}],
             )
@@ -526,7 +531,7 @@ class LinkedInService:
 JSON만 출력하세요. 다른 설명은 불필요합니다."""
 
         response = self.client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model=MODEL_SUPPORT,
             max_tokens=2000,
             messages=[{"role": "user", "content": prompt}],
         )
@@ -586,9 +591,9 @@ JSON만 출력하세요. 다른 설명은 불필요합니다."""
         # Build the prompt
         prompt = self._build_prompt(article, scenario, scenario_info, hook=hook, source_content=source_content)
 
-        # Generate with Claude
+        # Generate with Claude (Opus for writing quality)
         response = self.client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model=MODEL_WRITING,
             max_tokens=4000,
             messages=[{"role": "user", "content": prompt}],
         )
@@ -618,7 +623,7 @@ JSON만 출력하세요. 다른 설명은 불필요합니다."""
 마지막에 원문 링크를 포함하세요: {article.url}"""
 
             response = self.client.messages.create(
-                model="claude-sonnet-4-20250514",
+                model=MODEL_WRITING,
                 max_tokens=4000,
                 messages=[{"role": "user", "content": fix_prompt}],
             )
@@ -967,7 +972,7 @@ JSON만 출력하세요. 다른 설명은 불필요합니다."""
 - 1800자 이상 2800자 이하 유지"""
 
         response = self.client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model=MODEL_WRITING,
             max_tokens=4000,
             messages=[{"role": "user", "content": prompt}],
         )

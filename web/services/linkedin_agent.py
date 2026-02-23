@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from web.models import Article, LinkedInDraft, ReferencePost
 from web.config import ANTHROPIC_API_KEY, LINKEDIN_GUIDELINES_PATH
-from web.services.linkedin_service import SCENARIOS
+from web.services.linkedin_service import SCENARIOS, MODEL_WRITING, MODEL_SUPPORT
 from web.services.source_fetcher import fetch as fetch_source_content
 
 
@@ -821,18 +821,19 @@ JSON만 출력하세요. 다른 설명은 불필요합니다."""
 
     async def _call_claude_streaming(self, prompt: str, session: AgentSession, step: int) -> str:
         """Call Claude API with streaming, yielding partial content via SSE."""
-        # Use sync API in async context via thread pool
+        # Steps 0 (analysis), 3 (draft), 4 (review) use Opus for quality
+        model = MODEL_WRITING if step in (0, 3, 4) else MODEL_SUPPORT
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(
             None,
-            lambda: self._call_claude_sync(prompt)
+            lambda: self._call_claude_sync(prompt, model=model)
         )
         return result
 
-    def _call_claude_sync(self, prompt: str) -> str:
+    def _call_claude_sync(self, prompt: str, model: str = MODEL_WRITING) -> str:
         """Synchronous Claude API call."""
         response = self.client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model=model,
             max_tokens=4000,
             messages=[{"role": "user", "content": prompt}],
         )
