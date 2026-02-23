@@ -255,6 +255,61 @@ JSON만 출력하세요."""
 
         return updated_data
 
+    def learn_from_draft(self, draft_id: int) -> dict:
+        """Learn from a published/finalized draft: evaluation score + user_feedback → pattern update.
+
+        Called after publish or manual trigger. Determines positive/negative based on
+        eval score and collects feedback from user_feedback + chat_history.
+        """
+        draft = self.db.query(LinkedInDraft).filter(LinkedInDraft.id == draft_id).first()
+        if not draft:
+            return {"error": f"Draft {draft_id} not found"}
+
+        if not draft.draft_content:
+            return {"error": "Draft has no content"}
+
+        # Determine score from evaluation
+        eval_score = 0
+        if draft.evaluation:
+            try:
+                eval_data = json.loads(draft.evaluation)
+                eval_score = eval_data.get("overall_score", 0)
+            except (json.JSONDecodeError, KeyError):
+                pass
+
+        is_positive = eval_score >= 70
+
+        # Collect feedback from user_feedback + chat_history
+        feedback_parts = []
+        if draft.user_feedback and draft.user_feedback.strip():
+            feedback_parts.append(draft.user_feedback.strip())
+
+        if draft.chat_history:
+            try:
+                chats = json.loads(draft.chat_history)
+                for msg in chats:
+                    if msg.get("role") == "user":
+                        feedback_parts.append(msg["content"][:200])
+            except (json.JSONDecodeError, KeyError):
+                pass
+
+        feedback = "\n".join(feedback_parts)
+
+        # No feedback + positive → update_from_post (general style learning)
+        if not feedback and is_positive:
+            return self.update_from_post(draft.draft_content)
+
+        # Has feedback or negative → learn_from_feedback
+        if feedback:
+            return self.learn_from_feedback(draft.draft_content, feedback, is_positive)
+
+        # Negative but no feedback → still learn negative patterns
+        return self.learn_from_feedback(
+            draft.draft_content,
+            f"평가 점수 {eval_score}/100 — 자동 학습",
+            is_positive,
+        )
+
     def _parse_json(self, raw: str) -> dict:
         """Extract JSON from Claude response."""
         try:

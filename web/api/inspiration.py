@@ -265,6 +265,14 @@ async def learn_from_post(
         # 지침 업데이트 제안 생성
         suggestions = learner.suggest_updates(analysis)
 
+        # StyleProfile도 업데이트
+        try:
+            from web.services.style_analyzer import StyleAnalyzer
+            analyzer = StyleAnalyzer(db)
+            analyzer.update_from_post(post.content)
+        except Exception:
+            pass  # StyleProfile 업데이트 실패가 학습을 막으면 안 됨
+
         return {
             "success": True,
             "suggestions": suggestions,

@@ -312,7 +312,40 @@ async def update_post(
     db.commit()
     db.refresh(draft)
 
+    # Auto-learn on publish: update StyleProfile
+    if data.status == "published" or data.linkedin_url:
+        try:
+            from web.services.style_analyzer import StyleAnalyzer
+            analyzer = StyleAnalyzer(db)
+            analyzer.learn_from_draft(draft_id)
+        except Exception:
+            pass  # 학습 실패가 발행을 막으면 안 됨
+
     return {"success": True, "post": draft.to_dict()}
+
+
+@router.post("/posts/{draft_id}/learn")
+async def learn_from_draft(
+    draft_id: int,
+    db: Session = Depends(get_db),
+):
+    """Trigger StyleProfile learning from a draft's evaluation + feedback."""
+    draft = db.query(LinkedInDraft).filter(LinkedInDraft.id == draft_id).first()
+    if not draft:
+        raise HTTPException(status_code=404, detail="Draft not found")
+
+    from web.services.style_analyzer import StyleAnalyzer
+
+    try:
+        analyzer = StyleAnalyzer(db)
+        result = analyzer.learn_from_draft(draft_id)
+        if "error" in result:
+            raise HTTPException(status_code=400, detail=result["error"])
+        return {"success": True, "profile": result}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"학습 실패: {str(e)}")
 
 
 @router.post("/drafts/{draft_id}/finalize")

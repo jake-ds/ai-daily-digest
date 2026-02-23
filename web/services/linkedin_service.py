@@ -13,10 +13,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from anthropic import Anthropic
 from sqlalchemy.orm import Session
 
-from web.models import Article, LinkedInDraft, ReferencePost
-from web.config import ANTHROPIC_API_KEY, LINKEDIN_GUIDELINES_PATH
+from web.models import Article, LinkedInDraft
+from web.config import ANTHROPIC_API_KEY
 from web.services.source_fetcher import fetch as fetch_source_content
 from web.services.web_researcher import research_article
+from web.services.style_brief import StyleBriefBuilder
 
 # Writing-critical steps use Opus for quality; classification/evaluation use Haiku/Sonnet
 MODEL_WRITING = "claude-opus-4-20250514"
@@ -77,14 +78,6 @@ class LinkedInService:
     def __init__(self, db: Session):
         self.db = db
         self.client = Anthropic(api_key=ANTHROPIC_API_KEY)
-        self.guidelines = self._load_guidelines()
-
-    def _load_guidelines(self) -> str:
-        """Load LinkedIn guidelines from file."""
-        try:
-            return LINKEDIN_GUIDELINES_PATH.read_text(encoding="utf-8")
-        except FileNotFoundError:
-            return ""
 
     # 시나리오 감지 결과 캐시 (article_id -> {scenario, confidence, reason})
     _scenario_cache: dict = {}
@@ -315,129 +308,6 @@ class LinkedInService:
             "char_count": char_count,
         }
 
-    def _extract_scenario_guidelines(self, scenario: str) -> str:
-        """Extract common rules + specific scenario section from guidelines."""
-        if not self.guidelines:
-            return ""
-
-        sections = []
-
-        # 1. Persona section
-        persona_match = re.search(
-            r'## Persona\n(.*?)(?=\n---)',
-            self.guidelines, re.DOTALL,
-        )
-        if persona_match:
-            sections.append(f"## 페르소나\n{persona_match.group(1).strip()}")
-
-        # 2. Specific scenario guide
-        scenario_pattern = rf'### 시나리오 {scenario}:.*?(?=\n---|\n### 시나리오 [A-F]:|$)'
-        scenario_match = re.search(scenario_pattern, self.guidelines, re.DOTALL)
-        if scenario_match:
-            sections.append(scenario_match.group(0).strip())
-
-        # 3. Common rules (공통 규칙 section)
-        common_match = re.search(
-            r'## 공통 규칙\n(.*?)(?=\n## |$)',
-            self.guidelines, re.DOTALL,
-        )
-        if common_match:
-            sections.append(f"## 공통 규칙\n{common_match.group(1).strip()}")
-
-        # 4. Specific scenario example
-        example_pattern = rf'### 시나리오 {scenario} 예시.*?```\n(.*?)```'
-        example_match = re.search(example_pattern, self.guidelines, re.DOTALL)
-        if example_match:
-            sections.append(f"## 이 시나리오의 예시\n```\n{example_match.group(1).strip()}\n```")
-
-        return "\n\n".join(sections)
-
-    def _extract_persona(self) -> str:
-        """Extract persona section from guidelines."""
-        if not self.guidelines:
-            return ""
-
-        persona_match = re.search(
-            r'## Persona\n(.*?)(?=\n---)',
-            self.guidelines, re.DOTALL,
-        )
-        if persona_match:
-            return persona_match.group(1).strip()
-
-        return ""
-
-    def _get_past_learnings(self, limit: int = 5) -> str:
-        """Extract learnings from past drafts (FAIL patterns, user feedback).
-
-        Returns a formatted string of past mistakes to avoid, limited to ~500 chars.
-        """
-        try:
-            # 최근 final 드래프트에서 evaluation 데이터 가져오기
-            past_drafts = (
-                self.db.query(LinkedInDraft)
-                .filter(LinkedInDraft.evaluation.isnot(None))
-                .order_by(LinkedInDraft.created_at.desc())
-                .limit(limit)
-                .all()
-            )
-
-            if not past_drafts:
-                return ""
-
-            fail_patterns = []
-            user_corrections = []
-
-            for draft in past_drafts:
-                # evaluation에서 FAIL 항목 추출
-                if draft.evaluation:
-                    try:
-                        eval_data = json.loads(draft.evaluation)
-                        for item in eval_data.get("items", []):
-                            if not item.get("pass", True):
-                                fail_msg = f"[{item.get('category', '')}] {item.get('rule', '')}"
-                                if fail_msg not in fail_patterns:
-                                    fail_patterns.append(fail_msg)
-                    except (json.JSONDecodeError, KeyError):
-                        pass
-
-                # user_feedback에서 수정 요청 추출
-                if draft.user_feedback and draft.user_feedback.strip():
-                    user_corrections.append(draft.user_feedback.strip()[:100])
-
-                # chat_history에서 사용자 수정 요청 추출
-                if draft.chat_history:
-                    try:
-                        chats = json.loads(draft.chat_history)
-                        for msg in chats:
-                            if msg.get("role") == "user":
-                                user_corrections.append(msg["content"][:100])
-                    except (json.JSONDecodeError, KeyError):
-                        pass
-
-            if not fail_patterns and not user_corrections:
-                return ""
-
-            result_parts = []
-            if fail_patterns:
-                result_parts.append("## 반복 실수 방지 (이전 드래프트에서 FAIL된 항목)")
-                for p in fail_patterns[:5]:
-                    result_parts.append(f"- {p}")
-
-            if user_corrections:
-                result_parts.append("\n## 사용자 수정 이력 (이전 피드백)")
-                for c in user_corrections[:3]:
-                    result_parts.append(f"- {c}")
-
-            result = "\n".join(result_parts)
-            # 500자 제한
-            if len(result) > 500:
-                result = result[:497] + "..."
-
-            return result
-
-        except Exception:
-            return ""
-
     def _quick_evaluate(self, draft_content: str) -> str:
         """Quick evaluation using Haiku for simple mode drafts.
 
@@ -495,13 +365,14 @@ class LinkedInService:
         Returns:
             list[dict] — 각 {hook: str, style: str, reasoning: str}
         """
-        # 매번 지침서 새로 로드 (hot-reload)
-        self.guidelines = self._load_guidelines()
-
         if scenario is None:
             scenario = self.detect_scenario(article)
 
-        scenario_info = SCENARIOS.get(scenario, SCENARIOS["A"])
+        # StyleBrief 빌드 (guidelines + StyleProfile + references)
+        builder = StyleBriefBuilder(self.db)
+        brief = builder.build(scenario)
+
+        scenario_info = brief.scenario_info
 
         # Fetch source content for deeper hooks
         source_content = self._fetch_source_content(article.url)
@@ -513,18 +384,13 @@ class LinkedInService:
             article, source_content=source_content, research_context=research_context,
         )
 
-        # 시나리오별 지침서 추출
+        # Hook prompt section from brief
         hook_guidelines = ""
-        scenario_guidelines = self._extract_scenario_guidelines(scenario)
-        if scenario_guidelines:
-            hook_guidelines = f"""
-## 지침서 참고 (이 시나리오의 훅 관련 규칙)
-{scenario_guidelines}"""
+        hook_section_text = brief.to_hook_prompt_section()
+        if hook_section_text:
+            hook_guidelines = f"\n{hook_section_text}"
 
-        # 페르소나 추출
-        persona = self._extract_persona()
-        if not persona:
-            persona = "- VC 심사역 + ML 엔지니어 출신 AI 빌더\n- 최신 AI 기술과 시장 동향에 깊은 이해"
+        persona = brief.persona
 
         # 추가 지시 섹션
         instructions_section = ""
@@ -619,13 +485,14 @@ JSON만 출력하세요. 다른 설명은 불필요합니다."""
         Returns:
             LinkedInDraft record
         """
-        # 매 생성 시 지침서를 새로 로드 (hot-reload)
-        self.guidelines = self._load_guidelines()
-
         if scenario is None:
             scenario = self.detect_scenario(article)
 
-        scenario_info = SCENARIOS.get(scenario, SCENARIOS["A"])
+        # StyleBrief 빌드 (guidelines + StyleProfile + references)
+        builder = StyleBriefBuilder(self.db)
+        brief = builder.build(scenario)
+
+        scenario_info = brief.scenario_info
 
         # Fetch source content for deep reading
         source_content = self._fetch_source_content(article.url)
@@ -635,7 +502,7 @@ JSON만 출력하세요. 다른 설명은 불필요합니다."""
 
         # Build the prompt
         prompt = self._build_prompt(
-            article, scenario, scenario_info,
+            article, scenario, scenario_info, brief,
             hook=hook, source_content=source_content,
             research_context=research_context, instructions=instructions,
         )
@@ -724,56 +591,6 @@ JSON만 출력하세요. 다른 설명은 불필요합니다."""
             .all()
         )
 
-    def _get_reference_examples(self, scenario: str) -> str:
-        """Get reference post examples for the given scenario (scenario-filtered)."""
-        examples = []
-
-        # 1. 같은 시나리오 ReferencePost 우선 2개
-        ref_posts = (
-            self.db.query(ReferencePost)
-            .filter(ReferencePost.scenario == scenario)
-            .order_by(ReferencePost.created_at.desc())
-            .limit(2)
-            .all()
-        )
-        for post in ref_posts:
-            examples.append(post.content)
-
-        # 부족하면 다른 시나리오에서 fallback
-        if len(examples) < 2:
-            remaining = 2 - len(examples)
-            existing_ids = [p.id for p in ref_posts]
-            query = self.db.query(ReferencePost)
-            if existing_ids:
-                query = query.filter(ReferencePost.id.notin_(existing_ids))
-            fallback_posts = (
-                query
-                .order_by(ReferencePost.created_at.desc())
-                .limit(remaining)
-                .all()
-            )
-            for post in fallback_posts:
-                examples.append(post.content)
-
-        # 2. 지침서에서 해당 시나리오 예시 추출
-        if self.guidelines:
-            pattern = rf"### 시나리오 {scenario} 예시.*?```\n(.*?)```"
-            match = re.search(pattern, self.guidelines, re.DOTALL)
-            if match:
-                examples.append(match.group(1).strip())
-
-        if not examples:
-            return ""
-
-        examples_text = ""
-        for i, ex in enumerate(examples, 1):
-            examples_text += f"\n### 예시 {i}\n{ex}\n"
-
-        return f"""## 참고 예시
-
-다음은 좋은 포스팅 예시입니다. 이 스타일과 구조를 참고하세요:
-{examples_text}"""
-
     def _fetch_source_content(self, url: str) -> str:
         """Fetch source article content for deep reading."""
         try:
@@ -834,53 +651,13 @@ JSON만 출력하세요. 다른 설명은 불필요합니다."""
 
         return result
 
-    def _build_prompt(self, article: Article, scenario: str, scenario_info: dict, hook: Optional[str] = None, source_content: str = "", research_context: str = "", instructions: Optional[str] = None) -> str:
-        """Build the generation prompt with Jake's guidelines."""
+    def _build_prompt(self, article: Article, scenario: str, scenario_info: dict, brief, hook: Optional[str] = None, source_content: str = "", research_context: str = "", instructions: Optional[str] = None) -> str:
+        """Build the generation prompt using StyleBrief."""
         # 기사 정보 섹션 (풍부한 맥락 포함)
         article_section = self._build_article_context(article, source_content=source_content, research_context=research_context)
 
-        # 시나리오 필터링된 지침서 (전문 대신 해당 시나리오 규칙만)
-        scenario_guidelines = self._extract_scenario_guidelines(scenario)
-        if scenario_guidelines:
-            rules_section = f"""## 작성 지침서 (반드시 준수)
-
-아래는 시나리오 {scenario}에 해당하는 작성 지침입니다. 이 지침을 철저히 따라주세요:
-
-{scenario_guidelines}"""
-        else:
-            rules_section = f"""## 공통 규칙
-
-### 문체
-- 기본: 하십시오체 ("~입니다", "~했습니다")
-- 리듬 전환시: 해요체로 변화 ("~해요", "~네요")
-- 자연스러운 톤 유지
-
-### 금지 사항
-- 조언톤 금지 ("~하세요", "~해보세요" 대신 "저는 ~합니다")
-- 공포 마케팅 금지 ("지금 안 하면 뒤처집니다" 금지)
-- 이모지 금지
-- "여러분" 호칭 금지
-- "혁명", "패러다임 시프트" 등 과장 표현 금지
-
-### 구조
-1. 훅 (1-2문장): {scenario_info['hook_style']}
-2. 본문: {scenario_info['structure']}
-3. 마무리: {scenario_info['closing']}
-
-### 길이
-- 1800~2800자 사이
-- 이상적: 2200~2600자
-- 단락 구분 명확히"""
-
-        # 페르소나 (지침서에서 추출, 없으면 기본값)
-        persona = self._extract_persona()
-        if persona:
-            persona_section = f"## 페르소나\n{persona}"
-        else:
-            persona_section = """## 페르소나
-- VC 심사역 + ML 엔지니어 출신 AI 빌더
-- 최신 AI 기술과 시장 동향에 깊은 이해
-- 실무 경험을 바탕으로 인사이트 공유"""
+        # StyleBrief에서 통합 스타일 가이드 생성
+        style_section = brief.to_writer_prompt_section()
 
         # 사전 선택된 훅 섹션
         hook_section = ""
@@ -893,14 +670,6 @@ JSON만 출력하세요. 다른 설명은 불필요합니다."""
 이 훅을 그대로 사용하되, 문맥에 맞게 미세 조정은 허용됩니다. 의미나 구조를 변경하지 마세요.
 """
 
-        # 이전 드래프트 학습 (반복 실수 방지)
-        past_learnings = self._get_past_learnings()
-        learnings_section = ""
-        if past_learnings:
-            learnings_section = f"""
-{past_learnings}
-"""
-
         # 추가 지시 섹션
         instructions_section = ""
         if instructions and instructions.strip():
@@ -911,7 +680,7 @@ JSON만 출력하세요. 다른 설명은 불필요합니다."""
 
         return f"""당신은 LinkedIn 포스팅 전문가입니다. 다음 기사를 바탕으로 LinkedIn 포스트를 작성해주세요.
 
-{persona_section}
+{style_section}
 
 ## 시나리오 {scenario}: {scenario_info['name']}
 - 설명: {scenario_info['description']}
@@ -921,9 +690,7 @@ JSON만 출력하세요. 다른 설명은 불필요합니다."""
 
 {article_section}
 
-{rules_section}
-{self._get_reference_examples(scenario)}
-{hook_section}{learnings_section}{instructions_section}## LinkedIn 포맷팅 규칙
+{hook_section}{instructions_section}## LinkedIn 포맷팅 규칙
 - 줄바꿈으로 단락을 명확히 구분하세요
 - 짧은 문장을 사용하세요 (한 문장에 2줄 이상 금지)
 - 넘버링(1, 2, 3)을 활용하여 가독성을 높이세요
