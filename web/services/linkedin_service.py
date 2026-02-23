@@ -407,35 +407,11 @@ JSON만 출력하세요. 다른 설명은 불필요합니다."""
 
         draft_content = response.content[0].text
 
-        # 품질 검증 및 자동 재생성 (최대 2회)
+        # AI 평가-수정 루프 (정규식 + full AI 평가 → 타겟 수정, 최대 2회)
         evaluator = LinkedInEvaluator(self.db, brief)
-        max_retries = 2
-        for attempt in range(max_retries):
-            validation = evaluator.validate(draft_content, article.url)
-            if validation["valid"]:
-                break
-
-            # 수정 프롬프트로 재생성
-            issues_text = "\n".join(f"- {issue}" for issue in validation["issues"])
-            fix_prompt = f"""다음 LinkedIn 포스트에 문제가 발견되었습니다. 아래 이슈를 수정해서 다시 작성해주세요.
-
-## 현재 초안
-{draft_content}
-
-## 발견된 문제
-{issues_text}
-
-## 수정 요청
-위 문제를 모두 수정하여 LinkedIn 포스트 본문만 다시 출력해주세요.
-설명 없이 바로 사용 가능한 형태로 작성하세요.
-마지막에 원문 링크를 포함하세요: {article.url}"""
-
-            response = self.client.messages.create(
-                model=MODEL_WRITING,
-                max_tokens=4000,
-                messages=[{"role": "user", "content": fix_prompt}],
-            )
-            draft_content = response.content[0].text
+        draft_content, evaluation, iteration_count = evaluator.evaluate_and_fix(
+            draft_content, article.url, max_iterations=2
+        )
 
         # Get next version number
         existing_drafts = (
@@ -444,9 +420,6 @@ JSON만 출력하세요. 다른 설명은 불필요합니다."""
             .count()
         )
         version = existing_drafts + 1
-
-        # Simple 모드 간이 평가
-        evaluation = evaluator.evaluate(draft_content, mode="quick")
 
         # Create draft record
         draft = LinkedInDraft(
@@ -589,7 +562,7 @@ JSON만 출력하세요. 다른 설명은 불필요합니다."""
             user_message: User's chat message
 
         Returns:
-            dict with revised_draft, char_count, chat_history, updated_content
+            dict with revised_draft, char_count, chat_history, updated_content, validation_warnings
         """
         import time as _time
 
@@ -613,6 +586,23 @@ JSON만 출력하세요. 다른 설명은 불필요합니다."""
             role_label = "사용자" if msg["role"] == "user" else "어시스턴트"
             chat_context += f"\n[{role_label}]: {msg['content']}\n"
 
+        # StyleBrief 로드 (시나리오/참고예시 컨텍스트)
+        brief = None
+        scenario_section = ""
+        reference_section = ""
+        if draft.scenario:
+            builder = StyleBriefBuilder(self.db)
+            brief = builder.build(draft.scenario)
+            scenario_info = brief.scenario_info
+
+            scenario_section = f"""
+## 시나리오 {draft.scenario}: {scenario_info.get('name', '')}
+- 본문 구조: {scenario_info.get('structure', '')}
+- 마무리: {scenario_info.get('closing', '')}
+"""
+            if brief.reference_examples:
+                reference_section = f"\n{brief.reference_examples}\n"
+
         # 가이드라인 체크리스트 (draft에 저장된 것 사용)
         checklist_section = ""
         if draft.guidelines_checklist:
@@ -633,7 +623,7 @@ JSON만 출력하세요. 다른 설명은 불필요합니다."""
 
 ## 현재 초안
 {current_content}
-{analysis_section}{checklist_section}{f'''
+{analysis_section}{checklist_section}{scenario_section}{reference_section}{f'''
 ## 이전 대화
 {chat_context}
 ''' if chat_context else ''}
@@ -653,6 +643,11 @@ JSON만 출력하세요. 다른 설명은 불필요합니다."""
         )
         revised = response.content[0].text
 
+        # 수정 후 검증
+        evaluator = LinkedInEvaluator(self.db, brief)
+        validation = evaluator.validate(revised, "")
+        warnings = validation["issues"] if not validation["valid"] else []
+
         # 채팅 이력 업데이트
         timestamp = _time.strftime("%Y-%m-%d %H:%M:%S")
         chat_messages.append({"role": "user", "content": user_message, "timestamp": timestamp})
@@ -668,6 +663,7 @@ JSON만 출력하세요. 다른 설명은 불필요합니다."""
             "char_count": len(revised),
             "chat_history": chat_messages,
             "updated_content": revised,
+            "validation_warnings": warnings,
         }
 
     def get_scenarios(self) -> dict:

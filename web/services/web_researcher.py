@@ -11,7 +11,7 @@ from web.config import ANTHROPIC_API_KEY
 from web.services.source_fetcher import fetch as fetch_source_content
 
 # Use Haiku for query generation (fast, cheap)
-MODEL_QUERY = "claude-opus-4-20250514"
+MODEL_QUERY = "claude-haiku-4-5-20251001"
 
 RESEARCH_TIMEOUT = 30  # seconds total
 FETCH_TIMEOUT = 10  # per-page fetch

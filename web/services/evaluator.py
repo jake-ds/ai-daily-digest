@@ -102,6 +102,65 @@ class LinkedInEvaluator:
             "char_count": char_count,
         }
 
+    def evaluate_and_fix(
+        self, content: str, article_url: str, max_iterations: int = 2
+    ) -> tuple[str, str, int]:
+        """AI 평가 → FAIL 타겟 수정 루프. Simple/Agent 모두 사용.
+
+        Returns: (final_content, evaluation_json, iteration_count)
+        """
+        current = content
+        eval_json = ""
+
+        for i in range(max_iterations):
+            # 1. 정규식 validate
+            validation = self.validate(current, article_url)
+
+            # 2. AI evaluate (full mode)
+            eval_json = self.evaluate(current, mode="full")
+
+            try:
+                eval_data = json.loads(eval_json)
+                score = eval_data.get("overall_score", 100)
+                fail_items = [it for it in eval_data.get("items", []) if not it.get("pass", True)]
+            except (json.JSONDecodeError, KeyError):
+                break
+
+            # 3. 통과 조건
+            if score >= 70 and len(fail_items) < 3 and validation["valid"]:
+                break
+
+            # 4. FAIL 항목 + validate 이슈 → 수정 프롬프트
+            issues = []
+            for item in fail_items:
+                issues.append(f"- [{item.get('category', '')}] {item.get('rule', '')}: {item.get('comment', '')}")
+            for issue in validation.get("issues", []):
+                issues.append(f"- [규칙] {issue}")
+
+            fix_prompt = f"""다음 LinkedIn 포스트에서 문제 항목만 수정해주세요.
+
+## 현재 초안
+{current}
+
+## 수정 필요 항목
+{chr(10).join(issues)}
+
+## 중요
+- 문제 항목만 수정하고, 잘 된 부분은 그대로 유지
+- LinkedIn 포스트 본문만 출력
+- 원문 링크 유지: {article_url}"""
+
+            try:
+                response = self.client.messages.create(
+                    model=MODEL_WRITING, max_tokens=4000,
+                    messages=[{"role": "user", "content": fix_prompt}],
+                )
+                current = response.content[0].text
+            except Exception:
+                break
+
+        return current, eval_json, i + 1
+
     def evaluate(self, content: str, mode: str = "quick") -> str:
         """AI-based evaluation. mode: 'quick' (Haiku) / 'full' (Opus).
 

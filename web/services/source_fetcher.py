@@ -1,6 +1,7 @@
 """Source content fetcher for deep reading of article URLs."""
 
 import re
+import time as _time
 from typing import Optional
 
 import httpx
@@ -88,8 +89,12 @@ def _collapse_whitespace(text: str) -> str:
     return text.strip()
 
 
+_cache: dict[str, tuple[float, Optional[str]]] = {}
+CACHE_TTL = 300  # 5분
+
+
 def fetch(url: str) -> Optional[str]:
-    """Fetch and extract main content from a URL.
+    """Fetch and extract main content from a URL (with TTL cache).
 
     Args:
         url: Article URL to fetch
@@ -97,6 +102,19 @@ def fetch(url: str) -> Optional[str]:
     Returns:
         Extracted text content (max 4000 chars), or None on failure
     """
+    now = _time.time()
+    if url in _cache:
+        cached_at, cached_result = _cache[url]
+        if now - cached_at < CACHE_TTL:
+            return cached_result
+
+    result = _fetch_impl(url)
+    _cache[url] = (now, result)
+    return result
+
+
+def _fetch_impl(url: str) -> Optional[str]:
+    """Internal fetch implementation."""
     if not url:
         return None
 

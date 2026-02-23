@@ -39,6 +39,11 @@
 
                 <div id="post-content" class="prose prose-sm max-w-none whitespace-pre-wrap text-gray-800 leading-relaxed">{{ post.draft_content }}</div>
 
+                <div class="mt-3 flex items-center gap-2">
+                    <span class="text-xs text-gray-500">글자 수:</span>
+                    <span id="post-char-count" class="text-xs font-medium"></span>
+                </div>
+
                 <div class="mt-4 pt-4 border-t text-xs text-gray-400">
                     Created: {{ post.created_at.strftime('%Y-%m-%d %H:%M') if post.created_at else '' }}
                     | Version {{ post.version }}
@@ -180,6 +185,20 @@
 
 <script>
 const postId = {{ post.id }};
+
+// 글자수 카운터
+document.addEventListener('DOMContentLoaded', function() {
+    const content = document.getElementById('post-content').textContent;
+    const len = content.trim().length;
+    const el = document.getElementById('post-char-count');
+    let cls, label;
+    if (len < 1800) { cls = 'text-red-600'; label = '부족'; }
+    else if (len <= 2600) { cls = 'text-green-600'; label = '적정'; }
+    else if (len <= 2800) { cls = 'text-yellow-600'; label = '약간 김'; }
+    else { cls = 'text-red-600'; label = '초과'; }
+    el.className = 'text-xs font-medium ' + cls;
+    el.textContent = len + '자 (' + label + ')';
+});
 
 {% if post.evaluation %}
 // Render evaluation table

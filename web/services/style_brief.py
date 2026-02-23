@@ -357,18 +357,30 @@ class StyleBriefBuilder:
                 return ""
 
             fail_patterns = []
+            success_patterns = []
             user_corrections = []
 
             for draft in past_drafts:
-                # Extract FAIL items from evaluation
+                # Extract patterns from evaluation
                 if draft.evaluation:
                     try:
                         eval_data = json.loads(draft.evaluation)
+                        overall_score = eval_data.get("overall_score", 0)
+
+                        # 실패 패턴 (기존)
                         for item in eval_data.get("items", []):
                             if not item.get("pass", True):
                                 fail_msg = f"[{item.get('category', '')}] {item.get('rule', '')}"
                                 if fail_msg not in fail_patterns:
                                     fail_patterns.append(fail_msg)
+
+                        # 성공 패턴 (고득점 드래프트)
+                        if overall_score >= 80:
+                            for item in eval_data.get("items", []):
+                                if item.get("pass") and len(item.get("comment", "")) > 5:
+                                    msg = f"[{item.get('category', '')}] {item.get('comment', '')}"
+                                    if msg not in success_patterns:
+                                        success_patterns.append(msg)
                     except (json.JSONDecodeError, KeyError):
                         pass
 
@@ -386,7 +398,7 @@ class StyleBriefBuilder:
                     except (json.JSONDecodeError, KeyError):
                         pass
 
-            if not fail_patterns and not user_corrections:
+            if not fail_patterns and not success_patterns and not user_corrections:
                 return ""
 
             result_parts = []
@@ -395,15 +407,20 @@ class StyleBriefBuilder:
                 for p in fail_patterns[:5]:
                     result_parts.append(f"- {p}")
 
+            if success_patterns:
+                result_parts.append("\n## 효과적이었던 패턴 (이전 고득점 드래프트)")
+                for p in success_patterns[:3]:
+                    result_parts.append(f"- {p}")
+
             if user_corrections:
                 result_parts.append("\n## 사용자 수정 이력 (이전 피드백)")
                 for c in user_corrections[:3]:
                     result_parts.append(f"- {c}")
 
             result = "\n".join(result_parts)
-            # 500 char limit
-            if len(result) > 500:
-                result = result[:497] + "..."
+            # 700 char limit (성공 패턴 추가로 한도 증가)
+            if len(result) > 700:
+                result = result[:697] + "..."
 
             return result
 

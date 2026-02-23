@@ -786,6 +786,22 @@ class LinkedInAgent:
             role_label = "사용자" if msg["role"] == "user" else "어시스턴트"
             chat_context += f"\n[{role_label}]: {msg['content']}\n"
 
+        # 시나리오/참고예시 컨텍스트
+        brief = session.style_brief
+        scenario_info = brief.scenario_info if brief else {}
+
+        scenario_section = ""
+        if scenario_info:
+            scenario_section = f"""
+## 시나리오 {session.scenario}: {scenario_info.get('name', '')}
+- 본문 구조: {scenario_info.get('structure', '')}
+- 마무리: {scenario_info.get('closing', '')}
+"""
+
+        reference_section = ""
+        if brief and brief.reference_examples:
+            reference_section = f"\n{brief.reference_examples}\n"
+
         prompt = f"""다음 LinkedIn 포스트를 사용자의 요청에 따라 수정해주세요.
 
 ## 현재 초안
@@ -796,7 +812,7 @@ class LinkedInAgent:
 
 ## 적용된 가이드라인 체크리스트
 {session.guidelines_checklist}
-{f'''
+{scenario_section}{reference_section}{f'''
 ## 이전 대화
 {chat_context}
 ''' if chat_context else ''}
@@ -810,6 +826,11 @@ class LinkedInAgent:
 - 1800자 이상 2800자 이하 유지"""
 
         revised = self._call_claude_sync(prompt)
+
+        # 수정 후 검증
+        evaluator = LinkedInEvaluator(self.db, brief)
+        validation = evaluator.validate(revised, "")
+        warnings = validation["issues"] if not validation["valid"] else []
 
         # Update session
         session.improved_draft = revised
@@ -828,6 +849,7 @@ class LinkedInAgent:
             "revised_draft": revised,
             "char_count": len(revised),
             "chat_history": session.chat_messages,
+            "validation_warnings": warnings,
         }
 
     def _sse(self, event: str, data: dict) -> str:
