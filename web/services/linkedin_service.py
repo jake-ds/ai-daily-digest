@@ -15,15 +15,16 @@ from sqlalchemy.orm import Session
 
 from web.models import Article, LinkedInDraft, ReferencePost
 from web.config import ANTHROPIC_API_KEY, LINKEDIN_GUIDELINES_PATH
+from web.services.source_fetcher import fetch as fetch_source_content
 
 
 # Jake's LinkedIn Post Scenarios
 SCENARIOS = {
     "A": {
         "name": "산업 분석 + 프레임워크",
-        "description": "충격적 숫자로 시작, 현상 분석 후 프레임워크 추출",
-        "hook_style": "충격적 숫자 + 방향성 제시",
-        "structure": "현상 나열 → 프레임워크 추출 → 시사점 확장",
+        "description": "테제 선언 후 점진적 논증으로 프레임워크 도출",
+        "hook_style": "문화적 훅 또는 충격적 숫자 + 테제 선언",
+        "structure": "테제 선언 → 점진적 논증 (난이도 상승) → 구체적 대비 → 종합 마무리",
         "closing": "본인 경험 연결 또는 선언",
     },
     "B": {
@@ -237,11 +238,11 @@ class LinkedInService:
         issues = []
         char_count = len(content)
 
-        # 1. 글자수 검증 (1200-1800)
-        if char_count < 1200:
-            issues.append(f"글자수 부족: {char_count}자 (최소 1200자 필요)")
-        elif char_count > 1800:
-            issues.append(f"글자수 초과: {char_count}자 (최대 1800자)")
+        # 1. 글자수 검증 (1800-2800)
+        if char_count < 1800:
+            issues.append(f"글자수 부족: {char_count}자 (최소 1800자 필요)")
+        elif char_count > 2800:
+            issues.append(f"글자수 초과: {char_count}자 (최대 2800자)")
 
         # 2. 금지어 체크
         for word in self.FORBIDDEN_WORDS:
@@ -423,7 +424,7 @@ class LinkedInService:
 1. 문체 (하십시오체 준수)
 2. 금지어 사용 여부 (이모지, 여러분, 과장표현)
 3. 구조 (훅-본문-마무리)
-4. 길이 (1200-1800자)
+4. 길이 (1800-2800자)
 5. 조언톤 여부
 
 ## 출력 형식 (JSON만)
@@ -470,7 +471,10 @@ class LinkedInService:
             scenario = self.detect_scenario(article)
 
         scenario_info = SCENARIOS.get(scenario, SCENARIOS["A"])
-        article_context = self._build_article_context(article)
+
+        # Fetch source content for deeper hooks
+        source_content = self._fetch_source_content(article.url)
+        article_context = self._build_article_context(article, source_content=source_content)
 
         # 시나리오별 지침서 추출
         hook_guidelines = ""
@@ -576,13 +580,16 @@ JSON만 출력하세요. 다른 설명은 불필요합니다."""
 
         scenario_info = SCENARIOS.get(scenario, SCENARIOS["A"])
 
+        # Fetch source content for deep reading
+        source_content = self._fetch_source_content(article.url)
+
         # Build the prompt
-        prompt = self._build_prompt(article, scenario, scenario_info, hook=hook)
+        prompt = self._build_prompt(article, scenario, scenario_info, hook=hook, source_content=source_content)
 
         # Generate with Claude
         response = self.client.messages.create(
             model="claude-sonnet-4-20250514",
-            max_tokens=2000,
+            max_tokens=4000,
             messages=[{"role": "user", "content": prompt}],
         )
 
@@ -612,7 +619,7 @@ JSON만 출력하세요. 다른 설명은 불필요합니다."""
 
             response = self.client.messages.create(
                 model="claude-sonnet-4-20250514",
-                max_tokens=2000,
+                max_tokens=4000,
                 messages=[{"role": "user", "content": fix_prompt}],
             )
             draft_content = response.content[0].text
@@ -713,8 +720,16 @@ JSON만 출력하세요. 다른 설명은 불필요합니다."""
 다음은 좋은 포스팅 예시입니다. 이 스타일과 구조를 참고하세요:
 {examples_text}"""
 
-    def _build_article_context(self, article: Article) -> str:
-        """Build enriched article context with metadata."""
+    def _fetch_source_content(self, url: str) -> str:
+        """Fetch source article content for deep reading."""
+        try:
+            content = fetch_source_content(url)
+            return content or ""
+        except Exception:
+            return ""
+
+    def _build_article_context(self, article: Article, source_content: str = "") -> str:
+        """Build enriched article context with metadata and optional source content."""
         lines = [
             f"## 기사 정보",
             f"- 제목: {article.title}",
@@ -741,12 +756,23 @@ JSON만 출력하세요. 다른 설명은 불필요합니다."""
         if article.source and any(src in article.source.lower() for src in authority_sources):
             lines.append(f"- 출처 권위: {article.source}는 권위 있는 연구/기술 기관입니다. 연구 권위를 강조하세요.")
 
-        return "\n".join(lines)
+        result = "\n".join(lines)
 
-    def _build_prompt(self, article: Article, scenario: str, scenario_info: dict, hook: Optional[str] = None) -> str:
+        # Append source content if available
+        if source_content:
+            result += f"""
+
+## 원문 콘텐츠
+아래는 기사 원문에서 추출한 내용입니다. 구체적 수치, 인용구, 사례, 대비 소재를 반드시 활용하세요.
+
+{source_content}"""
+
+        return result
+
+    def _build_prompt(self, article: Article, scenario: str, scenario_info: dict, hook: Optional[str] = None, source_content: str = "") -> str:
         """Build the generation prompt with Jake's guidelines."""
         # 기사 정보 섹션 (풍부한 맥락 포함)
-        article_section = self._build_article_context(article)
+        article_section = self._build_article_context(article, source_content=source_content)
 
         # 시나리오 필터링된 지침서 (전문 대신 해당 시나리오 규칙만)
         scenario_guidelines = self._extract_scenario_guidelines(scenario)
@@ -777,7 +803,8 @@ JSON만 출력하세요. 다른 설명은 불필요합니다."""
 3. 마무리: {scenario_info['closing']}
 
 ### 길이
-- 1200~1800자 사이
+- 1800~2800자 사이
+- 이상적: 2200~2600자
 - 단락 구분 명확히"""
 
         # 페르소나 (지침서에서 추출, 없으면 기본값)
@@ -830,19 +857,48 @@ JSON만 출력하세요. 다른 설명은 불필요합니다."""
 - 구분선(ㅡ)을 활용하여 시각적으로 정리하세요
 
 ## 길이 제약 (매우 중요)
-반드시 1200자 이상 1800자 이하로 작성하세요.
-이상적 길이는 1400-1600자입니다. 이 범위를 벗어나면 조절하세요.
+반드시 1800자 이상 2800자 이하로 작성하세요.
+이상적 길이는 2200-2600자입니다. 이 범위를 벗어나면 조절하세요.
 
 ## 출력 형식
 - 제목/헤더 없이 본문만 출력하세요. 첫 줄이 곧 훅입니다.
 - 설명이나 주석 없이 바로 사용 가능한 형태로 작성하세요.
 - 마지막에 원문 링크 한 줄: {article.url}
 
+## 작성 원칙
+
+### 1. 테제(Thesis) 주도
+한 문장으로 포스트 전체를 관통하는 핵심 주장 선언.
+좋은 예: "에이전트 시대에 살아남는 소프트웨어의 조건이 3가지로 수렴했습니다"
+나쁜 예: "최근 AI 업계에서 여러 움직임이 있었습니다" (테제 없음)
+
+### 2. 문화적 훅
+업계 격언/유명 문구를 비틀어 인지적 마찰 생성.
+예: "Make something people want" → "Make something agents want"
+
+### 3. 점진적 논증
+각 포인트가 이전 포인트 위에 쌓여야 함 (병렬 나열 금지).
+예: 문서(쉬움) → harness(어려움) → 도메인(불가능)
+
+### 4. 구체적 대비
+승자 vs 패자를 이름/숫자로 보여주기.
+예: "Supabase vs SendGrid", "2시간→3분"
+
+### 5. 원문 소재 활용
+원문 콘텐츠에서 구체적 수치, 인용구, 사례를 반드시 추출.
+
+### 6. 종합 마무리
+전체 논증을 한 문장으로 응축.
+예: "코드에서 문서로, 문서에서 harness로, harness에서 도메인으로."
+
 ## 다음과 같이 작성하지 마세요 (anti-pattern)
 1. 너무 일반적인 서론 ("오늘은 ~에 대해...")
 2. "~에 대해 이야기하겠습니다"
 3. "결론적으로~"
 4. "요약하면~"
+5. 표면적 정보 나열 — 원문 요약 반복은 포스팅이 아님
+6. 병렬 구조만 사용 — "첫째, 둘째, 셋째" 나열은 기계적
+7. 테제 없는 나열 — 뉴스 요약이지 포스팅이 아님
 """
 
     def chat_refine_by_draft(self, draft_id: int, user_message: str) -> dict:
@@ -908,11 +964,11 @@ JSON만 출력하세요. 다른 설명은 불필요합니다."""
 - 사용자의 요청사항만 반영하고, 나머지는 그대로 유지하세요
 - LinkedIn 포스트 본문만 출력하세요
 - 설명 없이 바로 사용 가능한 형태
-- 1200자 이상 1800자 이하 유지"""
+- 1800자 이상 2800자 이하 유지"""
 
         response = self.client.messages.create(
             model="claude-sonnet-4-20250514",
-            max_tokens=2000,
+            max_tokens=4000,
             messages=[{"role": "user", "content": prompt}],
         )
         revised = response.content[0].text

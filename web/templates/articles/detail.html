@@ -1604,16 +1604,16 @@ function updateEditorCharCount() {
     const len = textarea.value.length;
 
     let colorClass, label;
-    if (len < 1200) {
+    if (len < 1800) {
         colorClass = 'char-danger';
         label = '너무 짧음';
-    } else if (len < 1400) {
+    } else if (len < 2200) {
         colorClass = 'char-warning';
         label = '짧음';
-    } else if (len <= 1600) {
+    } else if (len <= 2600) {
         colorClass = 'char-ideal';
         label = '이상적 범위';
-    } else if (len <= 1800) {
+    } else if (len <= 2800) {
         colorClass = 'char-warning';
         label = '약간 김';
     } else {
@@ -1777,18 +1777,18 @@ function updateDraftEditCharCount(draftId) {
 // --- Char Count Helpers ---
 
 function getCharCountClass(len) {
-    if (len < 1200) return 'char-danger';
-    if (len < 1400) return 'char-warning';
-    if (len <= 1600) return 'char-ideal';
-    if (len <= 1800) return 'char-warning';
+    if (len < 1800) return 'char-danger';
+    if (len < 2200) return 'char-warning';
+    if (len <= 2600) return 'char-ideal';
+    if (len <= 2800) return 'char-warning';
     return 'char-danger';
 }
 
 function getCharCountLabel(len) {
-    if (len < 1200) return '너무 짧음';
-    if (len < 1400) return '짧음';
-    if (len <= 1600) return '이상적 범위';
-    if (len <= 1800) return '약간 김';
+    if (len < 1800) return '너무 짧음';
+    if (len < 2200) return '짧음';
+    if (len <= 2600) return '이상적 범위';
+    if (len <= 2800) return '약간 김';
     return '너무 김';
 }
 

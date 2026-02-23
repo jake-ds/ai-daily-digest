@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from web.models import Article, LinkedInDraft, ReferencePost
 from web.config import ANTHROPIC_API_KEY, LINKEDIN_GUIDELINES_PATH
 from web.services.linkedin_service import SCENARIOS
+from web.services.source_fetcher import fetch as fetch_source_content
 
 
 # Agent step definitions
@@ -55,6 +56,7 @@ class AgentSession:
     chat_messages: list = field(default_factory=list)
     draft_id: int = 0
     hook: str = ""
+    source_content: str = ""
 
 
 # Global session store
@@ -381,8 +383,8 @@ class LinkedInAgent:
             session.status = "error"
             yield self._sse("agent_error", {"message": str(e), "session_id": session_id})
 
-    def _build_article_context(self, article: Article) -> str:
-        """Build enriched article context with metadata."""
+    def _build_article_context(self, article: Article, source_content: str = "") -> str:
+        """Build enriched article context with metadata and optional source content."""
         lines = [
             f"## 기사 정보",
             f"- 제목: {article.title}",
@@ -406,14 +408,34 @@ class LinkedInAgent:
         if article.source and any(src in article.source.lower() for src in authority_sources):
             lines.append(f"- 출처 권위: {article.source}는 권위 있는 연구/기술 기관입니다. 연구 권위를 강조하세요.")
 
-        return "\n".join(lines)
+        result = "\n".join(lines)
+
+        if source_content:
+            result += f"""
+
+## 원문 콘텐츠
+아래는 기사 원문에서 추출한 내용입니다. 구체적 수치, 인용구, 사례, 대비 소재를 반드시 활용하세요.
+
+{source_content}"""
+
+        return result
 
     async def _step_analyze(self, session: AgentSession, article: Article, scenario_info: dict) -> AsyncGenerator[str, None]:
-        """Step 0: Analyze the article."""
+        """Step 0: Analyze the article (with source content fetching)."""
         session.current_step = 0
         yield self._sse("step_start", {"step": 0, "name": "기사 분석"})
 
-        article_context = self._build_article_context(article)
+        # Fetch source content for deep reading
+        try:
+            loop = asyncio.get_event_loop()
+            source_content = await loop.run_in_executor(
+                None, lambda: fetch_source_content(article.url) or ""
+            )
+            session.source_content = source_content
+        except Exception:
+            session.source_content = ""
+
+        article_context = self._build_article_context(article, source_content=session.source_content)
 
         prompt = f"""다음 기사를 분석해주세요. LinkedIn 포스팅을 위한 핵심 정보를 추출합니다.
 
@@ -587,7 +609,7 @@ class LinkedInAgent:
 - 본문 구조: {scenario_info['structure']}
 - 마무리: {scenario_info['closing']}
 
-{self._build_article_context(article)}
+{self._build_article_context(article, source_content=session.source_content)}
 
 ## 페르소나
 {persona}
@@ -599,19 +621,48 @@ class LinkedInAgent:
 - 구분선(ㅡ)을 활용하여 시각적으로 정리하세요
 
 ## 길이 제약 (매우 중요)
-반드시 1200자 이상 1800자 이하로 작성하세요.
-이상적 길이는 1400-1600자입니다. 이 범위를 벗어나면 조절하세요.
+반드시 1800자 이상 2800자 이하로 작성하세요.
+이상적 길이는 2200-2600자입니다. 이 범위를 벗어나면 조절하세요.
 
 ## 출력 형식
 - 제목/헤더 없이 본문만 출력하세요. 첫 줄이 곧 훅입니다.
 - 설명이나 주석 없이 바로 사용 가능한 형태로 작성하세요.
 - 마지막에 원문 링크 한 줄: {article.url}
 
+## 작성 원칙
+
+### 1. 테제(Thesis) 주도
+한 문장으로 포스트 전체를 관통하는 핵심 주장 선언.
+좋은 예: "에이전트 시대에 살아남는 소프트웨어의 조건이 3가지로 수렴했습니다"
+나쁜 예: "최근 AI 업계에서 여러 움직임이 있었습니다" (테제 없음)
+
+### 2. 문화적 훅
+업계 격언/유명 문구를 비틀어 인지적 마찰 생성.
+예: "Make something people want" → "Make something agents want"
+
+### 3. 점진적 논증
+각 포인트가 이전 포인트 위에 쌓여야 함 (병렬 나열 금지).
+예: 문서(쉬움) → harness(어려움) → 도메인(불가능)
+
+### 4. 구체적 대비
+승자 vs 패자를 이름/숫자로 보여주기.
+예: "Supabase vs SendGrid", "2시간→3분"
+
+### 5. 원문 소재 활용
+원문 콘텐츠에서 구체적 수치, 인용구, 사례를 반드시 추출.
+
+### 6. 종합 마무리
+전체 논증을 한 문장으로 응축.
+예: "코드에서 문서로, 문서에서 harness로, harness에서 도메인으로."
+
 ## 다음과 같이 작성하지 마세요 (anti-pattern)
 1. 너무 일반적인 서론 ("오늘은 ~에 대해...")
 2. "~에 대해 이야기하겠습니다"
 3. "결론적으로~"
-4. "요약하면~" """
+4. "요약하면~"
+5. 표면적 정보 나열 — 원문 요약 반복은 포스팅이 아님
+6. 병렬 구조만 사용 — "첫째, 둘째, 셋째" 나열은 기계적
+7. 테제 없는 나열 — 뉴스 요약이지 포스팅이 아님"""
 
         draft = await self._call_claude_streaming(prompt, session, step=3)
         session.draft = draft
@@ -741,7 +792,7 @@ class LinkedInAgent:
     {{"category": "금지", "rule": "여러분 호칭 없음", "pass": true, "comment": "적절한 톤"}},
     {{"category": "금지", "rule": "과장 표현 없음", "pass": true, "comment": "절제된 표현"}},
     {{"category": "금지", "rule": "조언톤 없음", "pass": true, "comment": "1인칭 서술"}},
-    {{"category": "형식", "rule": "길이 (1200-1800자)", "pass": true, "comment": "약 1500자"}},
+    {{"category": "형식", "rule": "길이 (1800-2800자)", "pass": true, "comment": "약 2400자"}},
     {{"category": "형식", "rule": "단락 구분", "pass": true, "comment": "명확한 구분"}},
     {{"category": "형식", "rule": "원문 링크 포함", "pass": true, "comment": "링크 포함됨"}}
   ],
@@ -782,7 +833,7 @@ JSON만 출력하세요. 다른 설명은 불필요합니다."""
         """Synchronous Claude API call."""
         response = self.client.messages.create(
             model="claude-sonnet-4-20250514",
-            max_tokens=3000,
+            max_tokens=4000,
             messages=[{"role": "user", "content": prompt}],
         )
         return response.content[0].text
@@ -851,7 +902,7 @@ JSON만 출력하세요. 다른 설명은 불필요합니다."""
 - 사용자의 요청사항만 반영하고, 나머지는 그대로 유지하세요
 - LinkedIn 포스트 본문만 출력하세요
 - 설명 없이 바로 사용 가능한 형태
-- 1200자 이상 1800자 이하 유지"""
+- 1800자 이상 2800자 이하 유지"""
 
         revised = self._call_claude_sync(prompt)
 
