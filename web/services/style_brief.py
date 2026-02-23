@@ -117,6 +117,17 @@ class StyleBrief:
 
         return "\n\n".join(sections) if sections else "기본 LinkedIn 포스팅 규칙"
 
+    def to_outline_prompt_section(self) -> str:
+        """Outline(Step 2) prompt block — structure patterns + reference examples."""
+        sections = []
+        if self.structure_patterns:
+            sections.append(f"## 선호하는 글 구조 패턴\n{self.structure_patterns}")
+        if self.positive_patterns:
+            sections.append("## 효과적인 패턴\n" + "\n".join(f"- {p}" for p in self.positive_patterns))
+        if self.reference_examples:
+            sections.append(self.reference_examples)
+        return "\n\n".join(sections)
+
     def to_hook_prompt_section(self) -> str:
         """Hook(Step 0) prompt block — persona + hook style only."""
         sections = []

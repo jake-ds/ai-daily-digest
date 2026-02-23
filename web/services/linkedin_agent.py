@@ -17,6 +17,8 @@ from web.services.linkedin_service import SCENARIOS, MODEL_WRITING
 from web.services.source_fetcher import fetch as fetch_source_content
 from web.services.web_researcher import research_article
 from web.services.style_brief import StyleBriefBuilder
+from web.services.article_context import build_article_context
+from web.services.evaluator import LinkedInEvaluator
 
 
 # Agent step definitions
@@ -177,53 +179,6 @@ class LinkedInAgent:
             session.status = "error"
             yield self._sse("agent_error", {"message": str(e), "session_id": session_id})
 
-    def _build_article_context(self, article: Article, source_content: str = "", research_context: str = "") -> str:
-        """Build enriched article context with metadata, source content, and research."""
-        lines = [
-            f"## 기사 정보",
-            f"- 제목: {article.title}",
-            f"- 출처: {article.source}",
-            f"- URL: {article.url}",
-            f"- 카테고리: {article.category or '미분류'}",
-            f"- 요약: {article.ai_summary or article.summary or '없음'}",
-        ]
-
-        ai = article.ai_score if article.ai_score is not None else article.score
-        if ai and ai >= 8:
-            lines.append(f"- 품질 점수: {ai}/10 (고품질 기사 → 깊은 분석과 구체적 인사이트를 포함하세요)")
-        elif ai and ai <= 4:
-            lines.append(f"- 품질 점수: {ai}/10 (간결한 코멘터리와 핵심 포인트 위주로 작성하세요)")
-        elif ai:
-            lines.append(f"- 품질 점수: {ai}/10")
-        if article.linkedin_potential:
-            lines.append(f"- LinkedIn 잠재력: {article.linkedin_potential}/10")
-
-        if article.viral_score and article.viral_score > 0:
-            lines.append(f"- 바이럴 점수: {article.viral_score} (화제성 높은 뉴스 → 독자의 관심을 활용하되, 과장은 피하세요)")
-
-        authority_sources = ["mit", "stanford", "google", "deepmind", "openai", "anthropic", "meta ai", "microsoft research"]
-        if article.source and any(src in article.source.lower() for src in authority_sources):
-            lines.append(f"- 출처 권위: {article.source}는 권위 있는 연구/기술 기관입니다. 연구 권위를 강조하세요.")
-
-        result = "\n".join(lines)
-
-        if source_content:
-            result += f"""
-
-## 원문 콘텐츠
-아래는 기사 원문에서 추출한 내용입니다. 구체적 수치, 인용구, 사례, 대비 소재를 반드시 활용하세요.
-
-{source_content}"""
-
-        if research_context:
-            result += f"""
-
-{research_context}
-
-위 리서치 결과에서 신뢰도 있는 수치, 인용구, 업계 맥락, 경쟁사 비교 데이터를 활용하여 포스트의 깊이를 높이세요."""
-
-        return result
-
     # ── Step 0: Hook 생성 ──────────────────────────────────────────────
 
     async def _step_hooks(self, session: AgentSession, article: Article, scenario_info: dict) -> AsyncGenerator[str, None]:
@@ -379,7 +334,7 @@ class LinkedInAgent:
 위 지시 사항을 분석에 반영하세요.
 """
 
-        article_context = self._build_article_context(
+        article_context = build_article_context(
             article,
             source_content=session.source_content,
             research_context=session.research_context,
@@ -416,6 +371,9 @@ class LinkedInAgent:
         session.current_step = 2
         yield self._sse("step_start", {"step": 2, "name": "글 흐름 구성"})
 
+        # StyleBrief 아웃라인 프롬프트
+        outline_style = session.style_brief.to_outline_prompt_section() if session.style_brief else ""
+
         prompt = f"""선택된 훅과 리서치 결과를 바탕으로 LinkedIn 포스트의 글 흐름(아웃라인)을 설계해주세요.
 
 ## 선택된 훅
@@ -423,6 +381,8 @@ class LinkedInAgent:
 
 ## 리서치 분석 결과
 {session.analysis}
+
+{outline_style}
 
 ## 시나리오: {session.scenario} - {scenario_info['name']}
 - 훅 스타일: {scenario_info['hook_style']}
@@ -539,7 +499,7 @@ class LinkedInAgent:
 - 본문 구조: {scenario_info['structure']}
 - 마무리: {scenario_info['closing']}
 
-{self._build_article_context(article, source_content=session.source_content, research_context=session.research_context)}
+{build_article_context(article, source_content=session.source_content, research_context=session.research_context)}
 {instructions_section}
 ## LinkedIn 포맷팅 규칙
 - 줄바꿈으로 단락을 명확히 구분하세요
@@ -597,7 +557,7 @@ class LinkedInAgent:
         yield self._sse("step_complete", {
             "step": 3,
             "content": draft,
-            "reference_data": {"reference_examples": reference_section},
+            "reference_data": {"reference_examples": brief.reference_examples},
         })
 
     # ── Step 4: 검토 & 개선 ──────────────────────────────────────────
@@ -618,7 +578,7 @@ class LinkedInAgent:
             session.iteration_count = i + 1
 
             # 1. 평가
-            eval_result = await self._evaluate_draft(current_draft, guidelines_text, session)
+            eval_result = await self._evaluate_draft_async(current_draft, session, mode="full")
 
             try:
                 eval_data = json.loads(eval_result)
@@ -738,56 +698,13 @@ class LinkedInAgent:
             session.status = "running"
             yield self._sse("input_timeout", {"step": 4})
 
-    async def _evaluate_draft(self, draft: str, guidelines_text: str, session: AgentSession) -> str:
-        """Run evaluation on a draft and return JSON string."""
-        prompt = f"""다음 LinkedIn 포스트를 지침 항목별로 평가해주세요.
-
-## 최종 초안
-{draft}
-
-## 지침서
-{guidelines_text}
-
-## 출력 형식 (JSON)
-다음 JSON 형식으로 평가 결과를 출력해주세요:
-
-```json
-{{
-  "overall_score": 85,
-  "items": [
-    {{"category": "문체", "rule": "하십시오체 기본", "pass": true, "comment": "적절히 사용됨"}},
-    {{"category": "문체", "rule": "리듬 전환 (해요체)", "pass": true, "comment": "자연스러운 전환"}},
-    {{"category": "구조", "rule": "훅 (1-2문장)", "pass": true, "comment": "강력한 숫자 훅"}},
-    {{"category": "구조", "rule": "본문 구조", "pass": true, "comment": "시나리오에 맞는 전개"}},
-    {{"category": "구조", "rule": "마무리", "pass": true, "comment": "행동 선언으로 마무리"}},
-    {{"category": "금지", "rule": "이모지 없음", "pass": true, "comment": "이모지 미사용"}},
-    {{"category": "금지", "rule": "여러분 호칭 없음", "pass": true, "comment": "적절한 톤"}},
-    {{"category": "금지", "rule": "과장 표현 없음", "pass": true, "comment": "절제된 표현"}},
-    {{"category": "금지", "rule": "조언톤 없음", "pass": true, "comment": "1인칭 서술"}},
-    {{"category": "형식", "rule": "길이 (1800-2800자)", "pass": true, "comment": "약 2400자"}},
-    {{"category": "형식", "rule": "단락 구분", "pass": true, "comment": "명확한 구분"}},
-    {{"category": "형식", "rule": "원문 링크 포함", "pass": true, "comment": "링크 포함됨"}}
-  ],
-  "summary": "전체적으로 지침을 잘 준수한 포스트입니다."
-}}
-```
-
-JSON만 출력하세요. 다른 설명은 불필요합니다."""
-
-        evaluation_raw = await self._call_claude(prompt, session)
-
-        # Extract JSON from response
-        try:
-            json_start = evaluation_raw.find("{")
-            json_end = evaluation_raw.rfind("}") + 1
-            if json_start >= 0 and json_end > json_start:
-                evaluation_json = evaluation_raw[json_start:json_end]
-                json.loads(evaluation_json)  # validate
-                return evaluation_json
-            else:
-                return json.dumps({"error": "평가 결과 파싱 실패", "raw": evaluation_raw})
-        except json.JSONDecodeError:
-            return json.dumps({"error": "JSON 파싱 실패", "raw": evaluation_raw})
+    async def _evaluate_draft_async(self, content: str, session: AgentSession, mode: str = "full") -> str:
+        """Run evaluation via LinkedInEvaluator in executor thread."""
+        evaluator = LinkedInEvaluator(self.db, session.style_brief)
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            None, lambda: evaluator.evaluate(content, mode=mode)
+        )
 
     # ── Step 5: 최종 발행 ──────────────────────────────────────────────
 
@@ -797,11 +714,8 @@ JSON만 출력하세요. 다른 설명은 불필요합니다."""
         yield self._sse("step_start", {"step": 5, "name": "최종 발행"})
 
         # 최종 평가 1회
-        brief = session.style_brief
-        guidelines_text = brief.to_reviewer_prompt_section() if brief else "기본 LinkedIn 포스팅 규칙"
-
         final_draft = session.improved_draft or session.draft
-        session.evaluation = await self._evaluate_draft(final_draft, guidelines_text, session)
+        session.evaluation = await self._evaluate_draft_async(final_draft, session, mode="full")
 
         # Save to database
         draft_record = self._save_draft(session, article)

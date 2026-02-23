@@ -18,6 +18,8 @@ from web.config import ANTHROPIC_API_KEY
 from web.services.source_fetcher import fetch as fetch_source_content
 from web.services.web_researcher import research_article
 from web.services.style_brief import StyleBriefBuilder
+from web.services.article_context import build_article_context
+from web.services.evaluator import LinkedInEvaluator
 
 # Writing-critical steps use Opus for quality; classification/evaluation use Haiku/Sonnet
 MODEL_WRITING = "claude-opus-4-20250514"
@@ -236,117 +238,6 @@ class LinkedInService:
         self._research_cache[article.id] = research_text
         return research_text
 
-    # 금지어 목록
-    FORBIDDEN_WORDS = [
-        "여러분", "혁명", "패러다임 시프트", "게임체인저",
-        "하세요", "해보세요", "읽어주셔서 감사",
-        "전환점", "돌풍", "대전환",
-    ]
-
-    # 조언톤 패턴
-    ADVICE_PATTERNS = [
-        r"~하세요", r"~해보세요", r"~해볼까요", r"~합시다",
-        r"해보시기", r"시작하세요", r"도전하세요", r"고민하세요",
-    ]
-
-    # 공포마케팅 패턴
-    FEAR_PATTERNS = [
-        r"뒤처", r"늦으면", r"지금 안 하면", r"놓치면",
-        r"도태", r"살아남", r"따라잡",
-    ]
-
-    def _validate_draft(self, content: str, article_url: str) -> dict:
-        """Validate a generated draft against quality rules."""
-        issues = []
-        char_count = len(content)
-
-        # 1. 글자수 검증 (1800-2800)
-        if char_count < 1800:
-            issues.append(f"글자수 부족: {char_count}자 (최소 1800자 필요)")
-        elif char_count > 2800:
-            issues.append(f"글자수 초과: {char_count}자 (최대 2800자)")
-
-        # 2. 금지어 체크
-        for word in self.FORBIDDEN_WORDS:
-            if word in content:
-                issues.append(f"금지어 포함: '{word}'")
-
-        # 3. 조언톤 정규식 체크
-        for pattern in self.ADVICE_PATTERNS:
-            if re.search(pattern, content):
-                issues.append(f"조언톤 감지: '{pattern}'")
-
-        # 4. 공포마케팅 패턴 체크
-        for pattern in self.FEAR_PATTERNS:
-            if re.search(pattern, content):
-                issues.append(f"공포마케팅 감지: '{pattern}'")
-
-        # 5. 이모지 체크
-        import unicodedata
-        for char in content:
-            if unicodedata.category(char).startswith("So"):
-                issues.append("이모지 포함됨")
-                break
-
-        # 6. 원문 링크 포함 여부
-        if article_url and article_url not in content:
-            issues.append("원문 링크가 포함되지 않음")
-
-        # 7. 구조 체크: 단락 수 최소 3개
-        paragraphs = [p.strip() for p in content.split("\n\n") if p.strip()]
-        if len(paragraphs) < 3:
-            issues.append(f"단락 수 부족: {len(paragraphs)}개 (최소 3개 필요)")
-
-        # 8. 훅(첫 줄) 210자 이내
-        first_line = content.strip().split("\n")[0] if content.strip() else ""
-        if len(first_line) > 210:
-            issues.append(f"훅이 너무 김: {len(first_line)}자 (최대 210자)")
-
-        return {
-            "valid": len(issues) == 0,
-            "issues": issues,
-            "char_count": char_count,
-        }
-
-    def _quick_evaluate(self, draft_content: str) -> str:
-        """Quick evaluation using Haiku for simple mode drafts.
-
-        Returns JSON evaluation string.
-        """
-        try:
-            prompt = f"""다음 LinkedIn 포스트를 간략히 평가해주세요.
-
-## 포스트
-{draft_content}
-
-## 평가 항목
-1. 문체 (하십시오체 준수)
-2. 금지어 사용 여부 (이모지, 여러분, 과장표현)
-3. 구조 (훅-본문-마무리)
-4. 길이 (1800-2800자)
-5. 조언톤 여부
-
-## 출력 형식 (JSON만)
-{{"overall_score": 85, "items": [{{"category": "문체", "rule": "하십시오체", "pass": true, "comment": "적절"}}], "summary": "한 줄 요약"}}"""
-
-            response = self.client.messages.create(
-                model=MODEL_CLASSIFY,
-                max_tokens=1000,
-                messages=[{"role": "user", "content": prompt}],
-            )
-
-            raw = response.content[0].text
-            json_start = raw.find("{")
-            json_end = raw.rfind("}") + 1
-            if json_start >= 0 and json_end > json_start:
-                evaluation_json = raw[json_start:json_end]
-                json.loads(evaluation_json)  # validate
-                return evaluation_json
-
-            return json.dumps({"overall_score": 0, "error": "평가 결과 파싱 실패"})
-        except Exception as e:
-            return json.dumps({"overall_score": 0, "error": str(e)})
-
     def generate_hooks(
         self,
         article: Article,
@@ -380,7 +271,7 @@ class LinkedInService:
         # Run research
         research_context = self._research_topic(article)
 
-        article_context = self._build_article_context(
+        article_context = build_article_context(
             article, source_content=source_content, research_context=research_context,
         )
 
@@ -517,9 +408,10 @@ JSON만 출력하세요. 다른 설명은 불필요합니다."""
         draft_content = response.content[0].text
 
         # 품질 검증 및 자동 재생성 (최대 2회)
+        evaluator = LinkedInEvaluator(self.db, brief)
         max_retries = 2
         for attempt in range(max_retries):
-            validation = self._validate_draft(draft_content, article.url)
+            validation = evaluator.validate(draft_content, article.url)
             if validation["valid"]:
                 break
 
@@ -553,8 +445,8 @@ JSON만 출력하세요. 다른 설명은 불필요합니다."""
         )
         version = existing_drafts + 1
 
-        # Simple 모드 간이 평가 (V4-005)
-        evaluation = self._quick_evaluate(draft_content)
+        # Simple 모드 간이 평가
+        evaluation = evaluator.evaluate(draft_content, mode="quick")
 
         # Create draft record
         draft = LinkedInDraft(
@@ -599,62 +491,10 @@ JSON만 출력하세요. 다른 설명은 불필요합니다."""
         except Exception:
             return ""
 
-    def _build_article_context(self, article: Article, source_content: str = "", research_context: str = "") -> str:
-        """Build enriched article context with metadata, source content, and research."""
-        lines = [
-            f"## 기사 정보",
-            f"- 제목: {article.title}",
-            f"- 출처: {article.source}",
-            f"- URL: {article.url}",
-            f"- 카테고리: {article.category or '미분류'}",
-            f"- 요약: {article.ai_summary or article.summary or '없음'}",
-        ]
-
-        # Score 기반 톤 가이드 (AI 점수 우선, fallback keyword 점수)
-        ai = article.ai_score if article.ai_score is not None else article.score
-        if ai and ai >= 8:
-            lines.append(f"- 품질 점수: {ai}/10 (고품질 기사 → 깊은 분석과 구체적 인사이트를 포함하세요)")
-        elif ai and ai <= 4:
-            lines.append(f"- 품질 점수: {ai}/10 (간결한 코멘터리와 핵심 포인트 위주로 작성하세요)")
-        elif ai:
-            lines.append(f"- 품질 점수: {ai}/10")
-        if article.linkedin_potential:
-            lines.append(f"- LinkedIn 잠재력: {article.linkedin_potential}/10")
-
-        # Viral score 맥락
-        if article.viral_score and article.viral_score > 0:
-            lines.append(f"- 바이럴 점수: {article.viral_score} (화제성 높은 뉴스 → 독자의 관심을 활용하되, 과장은 피하세요)")
-
-        # Source 기반 맥락
-        authority_sources = ["mit", "stanford", "google", "deepmind", "openai", "anthropic", "meta ai", "microsoft research"]
-        if article.source and any(src in article.source.lower() for src in authority_sources):
-            lines.append(f"- 출처 권위: {article.source}는 권위 있는 연구/기술 기관입니다. 연구 권위를 강조하세요.")
-
-        result = "\n".join(lines)
-
-        # Append source content if available
-        if source_content:
-            result += f"""
-
-## 원문 콘텐츠
-아래는 기사 원문에서 추출한 내용입니다. 구체적 수치, 인용구, 사례, 대비 소재를 반드시 활용하세요.
-
-{source_content}"""
-
-        # Append research context if available
-        if research_context:
-            result += f"""
-
-{research_context}
-
-위 리서치 결과에서 신뢰도 있는 수치, 인용구, 업계 맥락, 경쟁사 비교 데이터를 활용하여 포스트의 깊이를 높이세요."""
-
-        return result
-
     def _build_prompt(self, article: Article, scenario: str, scenario_info: dict, brief, hook: Optional[str] = None, source_content: str = "", research_context: str = "", instructions: Optional[str] = None) -> str:
         """Build the generation prompt using StyleBrief."""
         # 기사 정보 섹션 (풍부한 맥락 포함)
-        article_section = self._build_article_context(article, source_content=source_content, research_context=research_context)
+        article_section = build_article_context(article, source_content=source_content, research_context=research_context)
 
         # StyleBrief에서 통합 스타일 가이드 생성
         style_section = brief.to_writer_prompt_section()
