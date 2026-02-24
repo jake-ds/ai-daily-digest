@@ -15,7 +15,7 @@ MODEL_QUERY = "claude-haiku-4-5-20251001"
 
 RESEARCH_TIMEOUT = 30  # seconds total
 FETCH_TIMEOUT = 10  # per-page fetch
-MAX_RESEARCH_CHARS = 3000
+MAX_RESEARCH_CHARS = 6000
 
 
 def _get_cse_config() -> tuple[Optional[str], Optional[str]]:
@@ -24,28 +24,30 @@ def _get_cse_config() -> tuple[Optional[str], Optional[str]]:
     return GOOGLE_CSE_API_KEY, GOOGLE_CSE_ENGINE_ID
 
 
-def _generate_search_query(title: str, summary: str) -> str:
-    """Generate an effective search query from article title/summary using Haiku."""
+def _generate_search_queries(title: str, summary: str) -> list[str]:
+    """Generate two effective search queries from article title/summary using Haiku."""
     try:
         client = Anthropic(api_key=ANTHROPIC_API_KEY)
-        prompt = f"""다음 기사 제목과 요약에서 Google 검색에 적합한 영어 검색 쿼리를 1개만 생성해주세요.
-배경 지식, 업계 맥락, 경쟁사 비교 등 추가 리서치에 유용한 쿼리여야 합니다.
+        prompt = f"""다음 기사 제목과 요약에서 Google 검색에 적합한 영어 검색 쿼리를 2개 생성해주세요.
+- 쿼리 1: 배경 지식, 업계 맥락을 조사할 수 있는 쿼리
+- 쿼리 2: 경쟁사 비교, 대안 기술, 반론 등을 조사할 수 있는 쿼리
 
 제목: {title}
 요약: {summary or '없음'}
 
-검색 쿼리만 출력하세요 (따옴표 없이, 한 줄로)."""
+각 쿼리를 한 줄에 하나씩 출력하세요 (따옴표 없이, 번호 없이)."""
 
         response = client.messages.create(
             model=MODEL_QUERY,
-            max_tokens=100,
+            max_tokens=200,
             messages=[{"role": "user", "content": prompt}],
         )
-        query = response.content[0].text.strip().strip('"').strip("'")
-        return query
+        lines = [line.strip().strip('"').strip("'") for line in response.content[0].text.strip().split("\n") if line.strip()]
+        # Return up to 2 queries, fallback to title
+        return lines[:2] if lines else [title]
     except Exception:
         # Fallback: use title as-is
-        return title
+        return [title]
 
 
 def _search_google(query: str, num_results: int = 5) -> list[dict]:
@@ -85,16 +87,16 @@ def _search_google(query: str, num_results: int = 5) -> list[dict]:
         return []
 
 
-def _fetch_top_pages(results: list[dict], max_pages: int = 2) -> list[dict]:
+def _fetch_top_pages(results: list[dict], max_pages: int = 3) -> list[dict]:
     """Fetch full content from top search result pages."""
     enriched = []
     for result in results[:max_pages]:
         try:
             content = fetch_source_content(result["link"])
             if content:
-                # Truncate individual page to 1500 chars
-                if len(content) > 1500:
-                    content = content[:1500] + "..."
+                # Truncate individual page to 2500 chars
+                if len(content) > 2500:
+                    content = content[:2500] + "..."
                 enriched.append({
                     **result,
                     "content": content,
@@ -106,17 +108,19 @@ def _fetch_top_pages(results: list[dict], max_pages: int = 2) -> list[dict]:
     return enriched
 
 
-def _format_research(query: str, results: list[dict], enriched: list[dict]) -> str:
+def _format_research(queries: list[str], all_results: list[dict], enriched: list[dict]) -> str:
     """Format research results into structured text."""
     lines = [
         "## 리서치 결과",
-        f"",
-        f'### 검색: "{query}"',
         "",
     ]
 
+    for query in queries:
+        lines.append(f'### 검색: "{query}"')
+        lines.append("")
+
     # All results with snippets
-    for i, r in enumerate(results, 1):
+    for i, r in enumerate(all_results, 1):
         lines.append(f"{i}. [{r['title']}] ({r['link']})")
         if r.get("snippet"):
             lines.append(f"   {r['snippet']}")
@@ -149,7 +153,7 @@ def research(query: str, num_results: int = 5) -> Optional[str]:
         num_results: Number of search results to fetch
 
     Returns:
-        Formatted research text (max 3000 chars), or None if unavailable
+        Formatted research text (max 6000 chars), or None if unavailable
     """
     api_key, engine_id = _get_cse_config()
     if not api_key or not engine_id:
@@ -166,16 +170,16 @@ def research(query: str, num_results: int = 5) -> Optional[str]:
 
         # Check timeout
         if time.time() - start_time > RESEARCH_TIMEOUT:
-            return _format_research(query, results, [])
+            return _format_research([query], results, [])
 
         # Step 2: Fetch top pages for deeper content
-        enriched = _fetch_top_pages(results, max_pages=2)
+        enriched = _fetch_top_pages(results, max_pages=3)
 
         # Check timeout
         if time.time() - start_time > RESEARCH_TIMEOUT:
-            return _format_research(query, results, [])
+            return _format_research([query], results, [])
 
-        return _format_research(query, results, enriched)
+        return _format_research([query], results, enriched)
 
     except Exception as e:
         print(f"[WebResearcher] 리서치 실패: {e}")
@@ -185,13 +189,13 @@ def research(query: str, num_results: int = 5) -> Optional[str]:
 def research_article(title: str, summary: str = "", num_results: int = 5) -> Optional[str]:
     """Research a topic based on article title and summary.
 
-    Generates an optimized search query from the article info,
-    then runs web research.
+    Generates two optimized search queries from the article info,
+    then runs web research with both.
 
     Args:
         title: Article title
         summary: Article summary (optional)
-        num_results: Number of search results
+        num_results: Number of search results per query
 
     Returns:
         Formatted research text, or None if unavailable
@@ -203,14 +207,40 @@ def research_article(title: str, summary: str = "", num_results: int = 5) -> Opt
     start_time = time.time()
 
     try:
-        # Generate search query
-        query = _generate_search_query(title, summary)
+        # Generate search queries (2 queries)
+        queries = _generate_search_queries(title, summary)
 
         # Check timeout
         if time.time() - start_time > RESEARCH_TIMEOUT:
             return None
 
-        return research(query, num_results)
+        # Search with all queries, merge results (deduplicate by URL)
+        all_results = []
+        seen_urls = set()
+        for query in queries:
+            if time.time() - start_time > RESEARCH_TIMEOUT:
+                break
+            results = _search_google(query, num_results)
+            for r in results:
+                if r["link"] not in seen_urls:
+                    seen_urls.add(r["link"])
+                    all_results.append(r)
+
+        if not all_results:
+            return None
+
+        # Check timeout
+        if time.time() - start_time > RESEARCH_TIMEOUT:
+            return _format_research(queries, all_results, [])
+
+        # Fetch top pages for deeper content
+        enriched = _fetch_top_pages(all_results, max_pages=3)
+
+        # Check timeout
+        if time.time() - start_time > RESEARCH_TIMEOUT:
+            return _format_research(queries, all_results, [])
+
+        return _format_research(queries, all_results, enriched)
 
     except Exception as e:
         print(f"[WebResearcher] 리서치 실패: {e}")
