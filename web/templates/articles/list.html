@@ -8,6 +8,11 @@
     <div class="flex justify-between items-center">
         <h1 class="text-2xl font-bold text-gray-900">Articles</h1>
         <div class="flex items-center gap-3">
+            <button onclick="openAddArticleModal()"
+                    class="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                    title="Add article (n)">
+                + 기사 추가
+            </button>
             {% if unevaluated_count > 0 %}
             <button id="btn-evaluate" onclick="batchEvaluate()"
                     class="px-3 py-1.5 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition">
@@ -200,6 +205,74 @@
     {% endif %}
 </div>
 
+<!-- Add Article Modal -->
+<div id="add-article-modal" class="fixed inset-0 z-50 items-center justify-center bg-black bg-opacity-50" style="display:none;">
+    <div class="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4 p-6">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold">기사 추가</h3>
+            <button onclick="closeAddArticleModal()" class="text-gray-500 hover:text-gray-700">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+
+        <!-- Tabs -->
+        <div class="flex border-b mb-4">
+            <button id="tab-url" onclick="switchTab('url')"
+                    class="px-4 py-2 text-sm font-medium border-b-2 border-blue-600 text-blue-600">
+                URL 입력
+            </button>
+            <button id="tab-direct" onclick="switchTab('direct')"
+                    class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700">
+                직접 입력
+            </button>
+        </div>
+
+        <!-- URL Tab -->
+        <div id="panel-url">
+            <label class="block text-sm font-medium text-gray-700 mb-1">URL</label>
+            <input type="url" id="input-url" placeholder="https://..."
+                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 mb-3">
+        </div>
+
+        <!-- Direct Tab -->
+        <div id="panel-direct" style="display:none;">
+            <label class="block text-sm font-medium text-gray-700 mb-1">제목 (선택)</label>
+            <input type="text" id="input-title" placeholder="제목을 입력하세요"
+                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 mb-3">
+            <label class="block text-sm font-medium text-gray-700 mb-1">내용</label>
+            <textarea id="input-content" rows="6" placeholder="기사 내용 또는 메모를 붙여넣으세요"
+                      class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 mb-3"></textarea>
+        </div>
+
+        <!-- Common: Category -->
+        <label class="block text-sm font-medium text-gray-700 mb-1">카테고리</label>
+        <select id="input-category" class="w-full px-3 py-2 border border-gray-300 rounded-lg mb-4">
+            <option value="">자동 (manual)</option>
+            <option value="bigtech">bigtech</option>
+            <option value="research">research</option>
+            <option value="startup">startup</option>
+            <option value="vc">vc</option>
+            <option value="product">product</option>
+            <option value="manual">manual</option>
+        </select>
+
+        <!-- Status -->
+        <div id="add-article-status" class="mb-4 text-sm hidden"></div>
+
+        <!-- Submit -->
+        <div class="flex justify-end gap-2">
+            <button onclick="closeAddArticleModal()" class="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">
+                취소
+            </button>
+            <button id="btn-add-article" onclick="submitArticle()" class="px-4 py-2 text-sm text-white bg-blue-600 rounded-lg hover:bg-blue-700">
+                추가
+            </button>
+        </div>
+    </div>
+</div>
+
 <script>
 // Current filters state
 let currentFilters = {
@@ -354,6 +427,119 @@ async function batchSummarize() {
     }
 }
 
+// --- Add Article Modal ---
+let currentTab = 'url';
+
+function openAddArticleModal() {
+    const modal = document.getElementById('add-article-modal');
+    modal.style.display = 'flex';
+    hideStatus();
+    // Focus first input based on active tab
+    if (currentTab === 'url') {
+        document.getElementById('input-url').focus();
+    } else {
+        document.getElementById('input-title').focus();
+    }
+}
+
+function closeAddArticleModal() {
+    document.getElementById('add-article-modal').style.display = 'none';
+    // Reset fields
+    document.getElementById('input-url').value = '';
+    document.getElementById('input-title').value = '';
+    document.getElementById('input-content').value = '';
+    document.getElementById('input-category').value = '';
+    hideStatus();
+}
+
+function switchTab(tab) {
+    currentTab = tab;
+    const tabUrl = document.getElementById('tab-url');
+    const tabDirect = document.getElementById('tab-direct');
+    const panelUrl = document.getElementById('panel-url');
+    const panelDirect = document.getElementById('panel-direct');
+
+    if (tab === 'url') {
+        tabUrl.className = 'px-4 py-2 text-sm font-medium border-b-2 border-blue-600 text-blue-600';
+        tabDirect.className = 'px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700';
+        panelUrl.style.display = '';
+        panelDirect.style.display = 'none';
+        document.getElementById('input-url').focus();
+    } else {
+        tabDirect.className = 'px-4 py-2 text-sm font-medium border-b-2 border-blue-600 text-blue-600';
+        tabUrl.className = 'px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700';
+        panelDirect.style.display = '';
+        panelUrl.style.display = 'none';
+        document.getElementById('input-title').focus();
+    }
+    hideStatus();
+}
+
+function showStatus(msg, type) {
+    const el = document.getElementById('add-article-status');
+    el.classList.remove('hidden', 'text-red-600', 'text-green-600', 'text-blue-600');
+    el.classList.add(type === 'error' ? 'text-red-600' : type === 'success' ? 'text-green-600' : 'text-blue-600');
+    el.textContent = msg;
+}
+
+function hideStatus() {
+    document.getElementById('add-article-status').classList.add('hidden');
+}
+
+async function submitArticle() {
+    const btn = document.getElementById('btn-add-article');
+    const category = document.getElementById('input-category').value || undefined;
+    let body = {};
+
+    if (currentTab === 'url') {
+        const url = document.getElementById('input-url').value.trim();
+        if (!url) { showStatus('URL을 입력하세요', 'error'); return; }
+        body = { url, category };
+    } else {
+        const content = document.getElementById('input-content').value.trim();
+        if (!content) { showStatus('내용을 입력하세요', 'error'); return; }
+        const title = document.getElementById('input-title').value.trim() || undefined;
+        body = { title, content, category };
+    }
+
+    btn.disabled = true;
+    btn.textContent = '추가 중...';
+    hideStatus();
+
+    try {
+        const resp = await fetch('/api/articles', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        const data = await resp.json();
+
+        if (resp.status === 409) {
+            // 중복
+            showStatus('이미 존재하는 URL입니다', 'error');
+            const detail = data.detail || data;
+            if (detail.article_id) {
+                const el = document.getElementById('add-article-status');
+                el.innerHTML = `이미 존재하는 URL입니다. <a href="/articles/${detail.article_id}" class="underline text-blue-600">기존 기사 보기</a>`;
+            }
+        } else if (!resp.ok) {
+            showStatus(data.detail || '추가 실패', 'error');
+        } else {
+            window.location.href = `/articles/${data.article_id}`;
+        }
+    } catch (e) {
+        showStatus('네트워크 오류', 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '추가';
+    }
+}
+
+// Close modal on backdrop click / Escape
+document.getElementById('add-article-modal')?.addEventListener('click', function(e) {
+    if (e.target === this) closeAddArticleModal();
+});
+
 // Event listeners
 document.addEventListener('DOMContentLoaded', function() {
     // Search form
@@ -397,6 +583,16 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Keyboard shortcuts (only on articles list page)
     document.addEventListener('keydown', function(e) {
+        // Escape closes add-article modal from anywhere (including inputs)
+        if (e.key === 'Escape') {
+            const modal = document.getElementById('add-article-modal');
+            if (modal && modal.style.display !== 'none') {
+                e.preventDefault();
+                closeAddArticleModal();
+                return;
+            }
+        }
+
         // Skip if in input
         if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
@@ -421,6 +617,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     e.preventDefault();
                     toggleSelectedFavorite();
                 }
+                break;
+            case 'n':
+                e.preventDefault();
+                openAddArticleModal();
                 break;
         }
     });

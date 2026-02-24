@@ -1,16 +1,107 @@
 """Articles API endpoints."""
 
+import uuid
 from datetime import datetime, timedelta
+from typing import Optional
+
+import httpx
+from bs4 import BeautifulSoup
 from fastapi import APIRouter, Depends, Query, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
-from typing import Optional
 
 from web.database import get_db
 from web.models import Article
 from web.config import ANTHROPIC_API_KEY
 
 router = APIRouter(prefix="/api/articles", tags=["articles"])
+
+
+# --- Manual article creation ---
+
+class ManualArticleRequest(BaseModel):
+    url: Optional[str] = None
+    title: Optional[str] = None
+    content: Optional[str] = None
+    category: Optional[str] = None
+
+
+def _extract_title_from_url(url: str) -> Optional[str]:
+    """URL에서 <title> 태그 추출."""
+    try:
+        with httpx.Client(timeout=10, follow_redirects=True,
+                          headers={"User-Agent": "Mozilla/5.0 (compatible; AIDigestBot/1.0)"}) as client:
+            resp = client.get(url)
+            resp.raise_for_status()
+        soup = BeautifulSoup(resp.text, "html.parser")
+        tag = soup.find("title")
+        return tag.get_text(strip=True) if tag else None
+    except Exception:
+        return None
+
+
+@router.post("")
+async def create_article(
+    data: ManualArticleRequest,
+    db: Session = Depends(get_db),
+):
+    """수동 기사 추가 (URL 모드 또는 직접 입력 모드).
+
+    - **URL 모드**: url 제공 → 본문 자동 추출 + 제목 자동 추출
+    - **직접 입력 모드**: title/content 제공 → content를 summary에 저장
+    """
+    from web.services.source_fetcher import fetch as fetch_content
+
+    if data.url:
+        # URL 모드
+        url = data.url.strip()
+
+        # 중복 체크
+        existing = db.query(Article).filter(Article.url == url).first()
+        if existing:
+            raise HTTPException(
+                status_code=409,
+                detail={"message": "이미 존재하는 URL입니다", "article_id": existing.id},
+            )
+
+        # 본문 추출 시도
+        summary = fetch_content(url)
+
+        # 제목: 사용자 입력 우선, 없으면 <title> 추출
+        title = data.title or _extract_title_from_url(url) or url[:80]
+
+        article = Article(
+            title=title,
+            url=url,
+            source="manual",
+            category=data.category or "manual",
+            summary=summary,
+            score=0.0,
+        )
+
+    elif data.content:
+        # 직접 입력 모드
+        placeholder_url = f"manual://{uuid.uuid4().hex[:12]}"
+        title = data.title or data.content[:80].replace("\n", " ")
+
+        article = Article(
+            title=title,
+            url=placeholder_url,
+            source="manual",
+            category=data.category or "manual",
+            summary=data.content,
+            score=0.0,
+        )
+
+    else:
+        raise HTTPException(status_code=400, detail="url 또는 content가 필요합니다")
+
+    db.add(article)
+    db.commit()
+    db.refresh(article)
+
+    return {"article_id": article.id, "title": article.title}
 
 
 @router.get("")

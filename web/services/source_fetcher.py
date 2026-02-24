@@ -37,6 +37,8 @@ USER_AGENT = "Mozilla/5.0 (compatible; AIDigestBot/1.0)"
 
 def _is_skip_domain(url: str) -> bool:
     """Check if URL belongs to a domain we should skip."""
+    if url.startswith("manual://"):
+        return True
     try:
         from urllib.parse import urlparse
         hostname = urlparse(url).hostname or ""
